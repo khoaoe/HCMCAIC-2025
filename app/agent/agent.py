@@ -99,19 +99,9 @@ class VisualEventExtractor:
     
     def __init__(self, llm: LLM):
         self.llm = llm
-        self.extraction_prompt = PromptTemplate(
-            """
-            Extract visual elements and events from the following query. 
-            Focus on concrete, searchable visual descriptions and actions.
-            
-            COCO: {coco}
-            Query: {query}
-            
-            
-            Please extract the key visual elements, and events/actions within a query. And then rephrase them in a way that it is effective for embedding search. And Optionally, based on the original query, if you think we SHOULD use these COCO objects as the last filter to narrow down the search keyframes and have a better answer for the user questions, then feel free to provide a list!
-            No explanation, just the rephrased query, and the optional list of coco class
-            """
-        )
+        # Import enhanced competition prompts
+        from .enhanced_prompts import CompetitionPrompts
+        self.extraction_prompt = CompetitionPrompts.VCMR_VISUAL_EXTRACTION
 
     async def extract_visual_events(self, query: str) -> AgentResponse:
         prompt = self.extraction_prompt.format(query=query, coco=COCO_CLASS)
@@ -175,11 +165,11 @@ class AnswerGenerator:
         original_query: str,
         final_keyframes: List[KeyframeServiceReponse],
         objects_data: Dict[str, List[str]],
-        
+        asr_data: str = ""
     ):
         chat_messages = []
         for kf in final_keyframes:
-            keyy = f"L{kf.group_num:02d}/V{kf.video_num:03d}/{kf.keyframe_num:08d}.webb"
+            keyy = f"L{kf.group_num:02d}/V{kf.video_num:03d}/{kf.keyframe_num:08d}.webp"
             objects = objects_data.get(keyy, [])
 
             image_path = os.path.join(self.data_folder, f"L{kf.group_num:02d}/V{kf.video_num:03d}/{kf.keyframe_num:08d}.webp")
@@ -205,9 +195,14 @@ class AnswerGenerator:
             chat_messages.append(user_message)
 
         
+        # Include ASR context in the prompt
+        keyframes_context = "See the keyframes and their context above"
+        if asr_data:
+            keyframes_context += f"\n\nRelevant ASR Text: {asr_data}"
+        
         final_prompt = self.answer_prompt.format(
             query=original_query,
-            keyframes_context="See the keyframes and their context above"
+            keyframes_context=keyframes_context
         ) 
         query_message = ChatMessage(
             role=MessageRole.USER,
