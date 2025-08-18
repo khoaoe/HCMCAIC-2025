@@ -128,29 +128,35 @@ class KeyframeSearchAgent:
         print(f"{group_num}")
         print(f"{video_num}")
         print(f"L{group_num:02d}/V{video_num:03d}")
-        # matching_asr = next(
-        #     (entry for entry in self.asr_data if entry["file_path"] == f"L{group_num:02d}/V{video_num:03d}"),
-        #     None
-        # )
-        # print(f"{matching_asr=}")
-
+        # Extract ASR text for the temporal segment
+        matching_asr = None
+        for entry in self.asr_data.values():
+            if isinstance(entry, dict) and entry.get("file_path") == f"L{group_num:02d}/V{video_num:03d}":
+                matching_asr = entry
+                break
         
-        # asr_entries = matching_asr["result"]
-        # asr_text_segments = [
-        #     seg["text"]
-        #     for seg in asr_entries
-        #     if int(smallest_kf.keyframe_num) <= int(seg["start_frame"]) <= int(max_kf.keyframe_num)
-        #     or int(smallest_kf.keyframe_num) <= int(seg["end_frame"]) <= int(max_kf.keyframe_num)
-        # ]
-        # asr_text = " ".join(asr_text_segments)
-        # print(f"{asr_text=}")
+        asr_text = ""
+        if matching_asr and "result" in matching_asr:
+            asr_entries = matching_asr["result"]
+            asr_text_segments = []
+            for seg in asr_entries:
+                if isinstance(seg, dict):
+                    start_frame = int(seg.get("start_frame", 0))
+                    end_frame = int(seg.get("end_frame", 0))
+                    if (int(smallest_kf.keyframe_num) <= start_frame <= int(max_kf.keyframe_num) or
+                        int(smallest_kf.keyframe_num) <= end_frame <= int(max_kf.keyframe_num)):
+                        text = seg.get("text", "").strip()
+                        if text:
+                            asr_text_segments.append(text)
+            asr_text = " ".join(asr_text_segments)
+        print(f"ASR text for segment: {asr_text[:200]}...")
 
 
         answer = await self.answer_generator.generate_answer(
             original_query=user_query,
             final_keyframes=final_keyframes,
             objects_data=self.objects_data,
-            # asr_data=asr_text
+            asr_data=asr_text
         )
 
         return cast(str, answer)

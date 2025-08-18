@@ -215,3 +215,7 @@ __marimo__/
 /resources/*.bin
 /resources/*.pt
 /resources
+
+# details
+repo_details.txt
+descriptions.txt

@@ -216,3 +216,38 @@ def get_query_controller(
             status_code=503,
             detail=f"Query controller initialization failed: {str(e)}"
         )
+
+
+def get_competition_controller(
+    service_factory = Depends(get_service_factory),
+    app_settings: AppSettings = Depends(get_app_settings)
+) -> CompetitionController:
+    """Get competition controller instance for HCMC AI Challenge 2025 tasks"""
+    try:
+        llm = get_llm()
+        keyframe_service = service_factory.get_keyframe_query_service()
+        model_service = service_factory.get_model_service()
+
+        data_folder = app_settings.DATA_FOLDER
+        objects_data_path = Path(app_settings.FRAME2OBJECT) if hasattr(app_settings, 'FRAME2OBJECT') else None
+        asr_data_path = Path(app_settings.ASR_PATH) if hasattr(app_settings, 'ASR_PATH') else None
+        
+        # Optional video metadata path for temporal mapping
+        video_metadata_path = Path(app_settings.VIDEO_METADATA_PATH) if hasattr(app_settings, 'VIDEO_METADATA_PATH') else None
+
+        return CompetitionController(
+            llm=llm,
+            keyframe_service=keyframe_service,
+            model_service=model_service,
+            data_folder=data_folder,
+            objects_data_path=objects_data_path,
+            asr_data_path=asr_data_path,
+            video_metadata_path=video_metadata_path
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to create competition controller: {str(e)}")
+        raise HTTPException(
+            status_code=503,
+            detail=f"Competition controller initialization failed: {str(e)}"
+        )
