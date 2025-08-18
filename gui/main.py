@@ -3,6 +3,7 @@ import requests
 import json
 from typing import List, Optional
 import pandas as pd
+import os
 
 # Page configuration
 st.set_page_config(
@@ -227,7 +228,12 @@ if st.button("🚀 Search", use_container_width=True):
                 
                 if response.status_code == 200:
                     data = response.json()
-                    st.session_state.search_results = data.get("results", [])
+                    results = data.get("results", [])
+                    # Normalize Windows-style paths to use forward slashes so Streamlit can load images
+                    for item in results:
+                        if isinstance(item, dict) and 'path' in item and isinstance(item['path'], str):
+                            item['path'] = item['path'].replace('\\', '/')
+                    st.session_state.search_results = results
                     st.success(f"✅ Found {len(st.session_state.search_results)} results!")
                 else:
                     st.error(f"❌ API Error: {response.status_code} - {response.text}")
@@ -294,7 +300,7 @@ if st.session_state.search_results:
                     </div>
                     <p style="margin: 0.5rem 0; color: #666;"><strong>Path:</strong> {result['path']}</p>
                     <div style="background: #f8f9fa; padding: 0.5rem; border-radius: 5px; font-family: monospace; font-size: 0.9rem;">
-                        {result['path'].split('/')[-1]}
+                        {result['path']}
                     </div>
                 </div>
                 """, unsafe_allow_html=True)

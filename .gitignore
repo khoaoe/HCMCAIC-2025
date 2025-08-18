@@ -203,15 +203,15 @@ __marimo__/
 .streamlit/secrets.toml
 
 # cursor
-/.cursor/
-.cursor/
-.cursor/rules/
-.cursor/rules/byterover-rules.mdc
+/.cursor
+/.cursor/rules
+/.cursor/rules/byterover-rules.mdc
 
 # big folder
 /resources/embeddings_keys/
-resources/*.bin
-resources/*.pt
-resources/embeddings_keys/
-resources/*.bin
-resources/*.pt
+/resources/*.bin
+/resources/*.pt
+/resources/embeddings_keys/
+/resources/*.bin
+/resources/*.pt
+/resources

@@ -44,8 +44,9 @@ class AppSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=str(ENV_PATH), env_file_encoding='utf-8', case_sensitive=False, extra='ignore'
     )
-    DATA_FOLDER: str  = "/resources/keyframe"
-    ID2INDEX_PATH: str = "/resources/embeddings_keys/id2index.json"
+    # Use absolute paths rooted at the repository to avoid CWD/drive-root issues
+    DATA_FOLDER: str  = str(REPO_ROOT / 'resources' / 'keyframes' / 'L11' / 'kaggle' / 'working')
+    ID2INDEX_PATH: str = str(REPO_ROOT / 'resources' / 'embeddings_keys' / 'id2index.json')
     MODEL_NAME: str = "hf-hub:laion/CLIP-convnext_xxlarge-laion2B-s34B-b82K-augreg-soup"
     # FRAME2OBJECT: str = '/media/tinhanhnguyen/Data3/Projects/HCMAI2025_Baseline/app/data/detections.json'
     # ASR_PATH: str = '/media/tinhanhnguyen/Data3/Projects/HCMAI2025_Baseline/app/data/asr_proc.json'
