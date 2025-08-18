@@ -27,6 +27,7 @@ Convert the global2imgpath.json to this following format(id2index.json)
   "6": "1/1/466",
   "7": "1/1/467",
 }
+```
 to do this:
 ```bash
 cd migration
