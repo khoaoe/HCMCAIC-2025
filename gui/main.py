@@ -1,9 +1,8 @@
 import streamlit as st
 import requests
-import json
-from typing import List, Optional
-import pandas as pd
-import os
+import base64
+from PIL import Image
+import io
 
 # Page configuration
 st.set_page_config(
@@ -75,282 +74,7 @@ st.markdown("""
         text-align: center;
         margin: 0.5rem;
     }
-    
-    /* Clickable image styles */
-    .clickable-image {
-        cursor: pointer;
-        transition: transform 0.2s ease, box-shadow 0.2s ease;
-        border-radius: 10px;
-        border: 2px solid transparent;
-    }
-    
-    .clickable-image:hover {
-        transform: scale(1.05);
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-        border-color: #667eea;
-    }
-    
-    /* Modal styles */
-    .image-modal {
-        display: none;
-        position: fixed;
-        z-index: 9999;
-        left: 0;
-        top: 0;
-        width: 100%;
-        height: 100%;
-        background-color: rgba(0, 0, 0, 0.9);
-        opacity: 0;
-        transition: opacity 0.3s ease;
-    }
-    
-    .image-modal.active {
-        display: block;
-        opacity: 1;
-    }
-    
-    .modal-content {
-        position: relative;
-        width: 100%;
-        height: 100%;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        overflow: hidden;
-    }
-    
-    .modal-image {
-        max-width: 90%;
-        max-height: 90%;
-        object-fit: contain;
-        transition: transform 0.2s ease;
-        cursor: grab;
-    }
-    
-    .modal-image:active {
-        cursor: grabbing;
-    }
-    
-    .close-modal {
-        position: absolute;
-        top: 20px;
-        right: 30px;
-        color: white;
-        font-size: 40px;
-        font-weight: bold;
-        cursor: pointer;
-        z-index: 10000;
-        width: 50px;
-        height: 50px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: rgba(0, 0, 0, 0.5);
-        border-radius: 50%;
-        transition: background 0.2s ease;
-    }
-    
-    .close-modal:hover {
-        background: rgba(255, 255, 255, 0.2);
-    }
-    
-    .zoom-controls {
-        position: absolute;
-        bottom: 30px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: rgba(0, 0, 0, 0.7);
-        padding: 10px 20px;
-        border-radius: 25px;
-        color: white;
-        font-size: 14px;
-        z-index: 10000;
-    }
-    
-    .zoom-info {
-        position: absolute;
-        top: 20px;
-        left: 30px;
-        background: rgba(0, 0, 0, 0.7);
-        padding: 10px 15px;
-        border-radius: 15px;
-        color: white;
-        font-size: 14px;
-        z-index: 10000;
-    }
 </style>
-
-<script>
-let currentZoom = 1;
-let isDragging = false;
-let startX, startY, translateX = 0, translateY = 0;
-
-function openImageModal(imageSrc, caption) {
-    const modal = document.getElementById('imageModal');
-    const modalImage = document.getElementById('modalImage');
-    const modalCaption = document.getElementById('modalCaption');
-    
-    modalImage.src = imageSrc;
-    modalCaption.textContent = caption || '';
-    modal.classList.add('active');
-    
-    // Reset zoom and position
-    currentZoom = 1;
-    translateX = 0;
-    translateY = 0;
-    updateImageTransform();
-    updateZoomInfo();
-    
-    // Prevent body scroll
-    document.body.style.overflow = 'hidden';
-}
-
-function closeImageModal() {
-    const modal = document.getElementById('imageModal');
-    modal.classList.remove('active');
-    
-    // Restore body scroll
-    document.body.style.overflow = 'auto';
-}
-
-function updateImageTransform() {
-    const modalImage = document.getElementById('modalImage');
-    modalImage.style.transform = `translate(${translateX}px, ${translateY}px) scale(${currentZoom})`;
-}
-
-function updateZoomInfo() {
-    const zoomInfo = document.getElementById('zoomInfo');
-    zoomInfo.textContent = `Zoom: ${Math.round(currentZoom * 100)}%`;
-}
-
-// Zoom with mouse wheel
-function handleWheel(e) {
-    e.preventDefault();
-    
-    const zoomSpeed = 0.1;
-    const rect = e.target.getBoundingClientRect();
-    const centerX = rect.left + rect.width / 2;
-    const centerY = rect.top + rect.height / 2;
-    
-    const mouseX = e.clientX - centerX;
-    const mouseY = e.clientY - centerY;
-    
-    const oldZoom = currentZoom;
-    
-    if (e.deltaY < 0) {
-        // Zoom in
-        currentZoom = Math.min(currentZoom + zoomSpeed, 5);
-    } else {
-        // Zoom out
-        currentZoom = Math.max(currentZoom - zoomSpeed, 0.1);
-    }
-    
-    // Adjust position to zoom towards mouse cursor
-    const zoomRatio = currentZoom / oldZoom;
-    translateX = translateX * zoomRatio + mouseX * (1 - zoomRatio);
-    translateY = translateY * zoomRatio + mouseY * (1 - zoomRatio);
-    
-    updateImageTransform();
-    updateZoomInfo();
-}
-
-// Pan with mouse drag
-function handleMouseDown(e) {
-    if (currentZoom > 1) {
-        isDragging = true;
-        startX = e.clientX - translateX;
-        startY = e.clientY - translateY;
-        e.target.style.cursor = 'grabbing';
-    }
-}
-
-function handleMouseMove(e) {
-    if (isDragging && currentZoom > 1) {
-        translateX = e.clientX - startX;
-        translateY = e.clientY - startY;
-        updateImageTransform();
-    }
-}
-
-function handleMouseUp(e) {
-    if (isDragging) {
-        isDragging = false;
-        e.target.style.cursor = 'grab';
-    }
-}
-
-// Reset zoom on double click
-function handleDoubleClick(e) {
-    currentZoom = 1;
-    translateX = 0;
-    translateY = 0;
-    updateImageTransform();
-    updateZoomInfo();
-}
-
-// Keyboard shortcuts
-function handleKeyDown(e) {
-    if (document.getElementById('imageModal').classList.contains('active')) {
-        switch(e.key) {
-            case 'Escape':
-                closeImageModal();
-                break;
-            case '+':
-            case '=':
-                e.preventDefault();
-                currentZoom = Math.min(currentZoom + 0.2, 5);
-                updateImageTransform();
-                updateZoomInfo();
-                break;
-            case '-':
-                e.preventDefault();
-                currentZoom = Math.max(currentZoom - 0.2, 0.1);
-                updateImageTransform();
-                updateZoomInfo();
-                break;
-            case '0':
-                e.preventDefault();
-                currentZoom = 1;
-                translateX = 0;
-                translateY = 0;
-                updateImageTransform();
-                updateZoomInfo();
-                break;
-        }
-    }
-}
-
-// Event listeners
-document.addEventListener('keydown', handleKeyDown);
-
-// Initialize when DOM is ready
-document.addEventListener('DOMContentLoaded', function() {
-    // Create modal if it doesn't exist
-    if (!document.getElementById('imageModal')) {
-        const modalHTML = `
-            <div id="imageModal" class="image-modal">
-                <div class="modal-content">
-                    <span class="close-modal" onclick="closeImageModal()">&times;</span>
-                    <div class="zoom-info" id="zoomInfo">Zoom: 100%</div>
-                    <img id="modalImage" class="modal-image" 
-                         onwheel="handleWheel(event)"
-                         onmousedown="handleMouseDown(event)"
-                         onmousemove="handleMouseMove(event)"
-                         onmouseup="handleMouseUp(event)"
-                         ondblclick="handleDoubleClick(event)">
-                    <div class="zoom-controls">
-                        <div id="modalCaption"></div>
-                        <div style="margin-top: 5px; font-size: 12px; opacity: 0.8;">
-                            🔍 Scroll to zoom • 🖱️ Drag to pan • ⌨️ +/- to zoom • 0 to reset • Esc to close
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-        document.body.insertAdjacentHTML('beforeend', modalHTML);
-    }
-});
-</script>
 """, unsafe_allow_html=True)
 
 # Initialize session state
@@ -358,6 +82,16 @@ if 'search_results' not in st.session_state:
     st.session_state.search_results = []
 if 'api_base_url' not in st.session_state:
     st.session_state.api_base_url = "http://localhost:8000"
+
+# Define fullscreen image dialog
+@st.dialog("Fullscreen Image Viewer", width="large")
+def show_fullscreen_image(image_path, caption):
+    """Display image in fullscreen dialog"""
+    try:
+        st.image(image_path, use_container_width=True, caption=caption)
+    except Exception as e:
+        st.error(f"Could not load image: {str(e)}")
+        st.write(f"**Path:** {image_path}")
 
 # Header
 st.markdown("""
@@ -518,6 +252,7 @@ if st.button("🚀 Search", use_container_width=True):
             except Exception as e:
                 st.error(f"❌ Unexpected Error: {str(e)}")
 
+
 # Display results
 if st.session_state.search_results:
     st.markdown("---")
@@ -546,24 +281,16 @@ if st.session_state.search_results:
             col_img, col_info = st.columns([1, 3])
             
             with col_img:
-                # Try to display clickable image with zoom functionality
+                # Try to display image with fullscreen functionality
                 try:
-                    # Use HTML to create clickable image
-                    st.markdown(f"""
-                    <div style="text-align: center;">
-                        <img src="{result['path']}" 
-                             class="clickable-image" 
-                             style="width: 200px; max-height: 150px; object-fit: cover;"
-                             onclick="openImageModal('{result['path']}', 'Keyframe {i+1} - Score: {result['score']:.3f}')"
-                             alt="Keyframe {i+1}"
-                             title="Click to view fullscreen with zoom">
-                        <div style="margin-top: 5px; font-size: 12px; color: #666; text-align: center;">
-                            Keyframe {i+1}<br>
-                            <span style="font-size: 10px; opacity: 0.7;">Click to zoom</span>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                except:
+                    # Display image with click to fullscreen
+                    if st.button(f"📷", key=f"img_{i}", help="Click to view fullscreen"):
+                        show_fullscreen_image(result['path'], f"Keyframe {i+1} - Score: {result['score']:.3f}")
+                    
+                    # Show thumbnail image
+                    st.image(result['path'], width=200, caption=f"Keyframe {i+1}")
+                    
+                except Exception as e:
                     st.markdown(f"""
                     <div style="
                         background: #f0f0f0; 
@@ -577,7 +304,8 @@ if st.session_state.search_results:
                         margin: 0 auto;
                     ">
                         <div style="text-align: center; color: #666;">
-                            🖼️<br>Image Preview<br>Not Available
+                            🖼️<br>Image Preview<br>Not Available<br>
+                            <small style="font-size: 10px;">Path: {result['path']}</small>
                         </div>
                     </div>
                     <div style="margin-top: 5px; font-size: 12px; color: #666; text-align: center;">
@@ -607,34 +335,4 @@ st.markdown("""
 <div style="text-align: center; color: #666; padding: 1rem;">
     <p>🎥 Keyframe Search Application | Built with Streamlit</p>
 </div>
-
-<!-- Ensure modal is available -->
-<div id="imageModal" class="image-modal">
-    <div class="modal-content">
-        <span class="close-modal" onclick="closeImageModal()">&times;</span>
-        <div class="zoom-info" id="zoomInfo">Zoom: 100%</div>
-        <img id="modalImage" class="modal-image" 
-             onwheel="handleWheel(event)"
-             onmousedown="handleMouseDown(event)"
-             onmousemove="handleMouseMove(event)"
-             onmouseup="handleMouseUp(event)"
-             ondblclick="handleDoubleClick(event)">
-        <div class="zoom-controls">
-            <div id="modalCaption"></div>
-            <div style="margin-top: 5px; font-size: 12px; opacity: 0.8;">
-                🔍 Scroll to zoom • 🖱️ Drag to pan • ⌨️ +/- to zoom • 0 to reset • Esc to close
-            </div>
-        </div>
-    </div>
-</div>
-
-<script>
-// Ensure modal functionality is available
-if (typeof currentZoom === 'undefined') {
-    window.currentZoom = 1;
-    window.isDragging = false;
-    window.translateX = 0;
-    window.translateY = 0;
-}
-</script>
 """, unsafe_allow_html=True)
