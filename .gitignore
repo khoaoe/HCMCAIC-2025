@@ -204,6 +204,9 @@ __marimo__/
 
 # cursor
 .cursor
+.cursor/
+.cursor/rules/
+.cursor/rules/byterover-rules.mdc
 
 # big folder
 /resources/embeddings_keys/
