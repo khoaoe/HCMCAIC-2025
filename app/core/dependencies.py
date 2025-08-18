@@ -19,6 +19,7 @@ from controller.query_controller import QueryController
 from service import ModelService, KeyframeQueryService
 from core.settings import KeyFrameIndexMilvusSetting, MongoDBSettings, AppSettings
 from factory.factory import ServiceFactory
+from controller.competition_controller import CompetitionController
 from core.logger import SimpleLogger
 
 from llama_index.llms.google_genai import GoogleGenAI

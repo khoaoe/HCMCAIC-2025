@@ -3,7 +3,7 @@ Temporal Localization Module
 Converts keyframe-based results to temporal moments with start_time/end_time
 """
 
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple, Optional, Any
 import json
 from pathlib import Path
 from schema.response import KeyframeServiceReponse
