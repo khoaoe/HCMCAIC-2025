@@ -1,0 +1,244 @@
+High-level overview (single paragraph)
+
+The HCMC AI Challenge 2025 evaluates systems that search, localize, reason, and answer over large multimedia video corpora. There are two participation modes: Automatic (fully automated system → produce answers/moments without human intervention) and Interactive (system ↔ human in a timed session where the human can give feedback). Tasks include: Video Corpus Moment Retrieval (VCMR), Video Question Answering (Video QA / VQA), and Known-Item Search (KIS) with variants (visual, textual, progressive). Systems may use provided metadata (ASR, keyframes, embeddings) and any pre-trained or commercial models allowed by organizers.
+
+Task specifications (structured)
+
+For each task I give:
+
+Natural description (brief)
+
+Exact input schema (JSON) the LLM should expect to receive.
+
+Exact output schema (JSON) the LLM should return.
+
+Interaction protocol (if interactive track).
+
+Notes / constraints / examples.
+
+1) Video Corpus Moment Retrieval (VCMR)
+Natural description
+
+Find relevant temporal segments (moments) across a large video corpus given a free-form text query. Two variants: Automatic returns a ranked top-K list; Interactive returns single candidate(s) and accepts human feedback to refine the result.
+
+Input schema (VCMR — Automatic)
+{
+  "task": "vcMr_automatic",
+  "query": "string",                       // free-form natural language
+  "corpus_index": "string",                // identifier for corpus version
+  "video_catalog": [                       // optional if system has local index
+    {"video_id":"string","duration":float, "metadata": { /* ASR, tags, keyframe_URIs */ }}
+  ],
+  "top_k": 100                             // integer, maximum number of candidates requested
+}
+
+Output schema (VCMR — Automatic)
+{
+  "task": "vcMr_automatic",
+  "query": "string",
+  "candidates": [
+    {
+      "video_id": "string",
+      "start_time": float,    // seconds (use seconds as canonical unit)
+      "end_time": float,      // seconds (end_time > start_time)
+      "score": float          // model confidence / relevance score (higher = better)
+    }
+    /* up to top_k items */
+  ],
+  "notes": "string"            // optional: why top candidate is relevant
+}
+
+Input/output (VCMR — Interactive)
+
+System → User: provides one candidate moment:
+
+{"video_id":"string","start_time":float,"end_time":float,"score":float}
+
+
+User → System (feedback options) (choose one):
+
+Binary relevance: {"relevance": true|false}
+
+Graded relevance: {"relevance_score": 0..1}
+
+Free-text refinement: {"refine":"string"}
+
+System response: a new single candidate (same schema as System→User) or a short ranked list.
+
+Notes & constraints
+
+Time units: seconds preferred. If frames are used, include fps in video_catalog.
+
+Top-K typical upper bound: ≤ 100 (slides).
+
+Output must align to original timeline (no re-timing).
+
+Use ASR/metadata/embeddings if provided by organizers.
+
+2) Video Question Answering (Video QA / VQA)
+Natural description
+
+Answer a natural language question about the content of a single video or a video clip. The answer is a short factual text span or a token from a closed vocabulary.
+
+Input schema
+{
+  "task":"video_qa",
+  "video_id":"string",
+  "video_uri":"string",           // or encoded frames reference
+  "clip": {"start_time": float, "end_time": float}, // optional: full video if absent
+  "question":"string",
+  "context": { "asr":"string", "ocr": ["strings"], "metadata": { } } // optional
+}
+
+Output schema
+{
+  "task":"video_qa",
+  "video_id":"string",
+  "question":"string",
+  "answer": "string",             // short text answer or closed-vocab label
+  "evidence": [                   // optional: list of supporting timestamps or frames
+    {"start_time": float,"end_time": float, "confidence": float}
+  ],
+  "confidence": float             // model confidence 0..1
+}
+
+Notes & constraints
+
+Prefer concise answers. If multiple plausible answers exist, return top answer plus alternatives in notes.
+
+If question requires counting or names, ensure answer is explicit (e.g., "2 nights", "Alice; Maria").
+
+3) Known-Item Search (KIS)
+Natural description
+
+Locate a single exact target segment given either a visual example (KIS-V) or a textual description (KIS-T). KIS-C is progressive: a minimal description is provided and additional hints are revealed over time (e.g., every 60 seconds), possibly driven by participant questions.
+
+Input schemas
+
+KIS-V (visual):
+
+{
+  "task":"kis_v",
+  "query_clip_uri":"string",    // short clip showing the target
+  "corpus_index":"string"
+}
+
+
+KIS-T (textual):
+
+{
+  "task":"kis_t",
+  "text_description":"string",
+  "corpus_index":"string"
+}
+
+
+KIS-C (progressive):
+Initial:
+
+{
+  "task":"kis_c",
+  "initial_hint":"string",
+  "corpus_index":"string",
+  "hint_time_step_sec": 60
+}
+
+Output schema (KIS)
+{
+  "task":"kis",
+  "video_id":"string",
+  "start_time": float,
+  "end_time": float,
+  "match_confidence": float
+}
+
+Notes & constraints
+
+KIS requires exact match to the presented target segment (time alignment).
+
+For KIS-C, the system should support iterative refinement when new hints arrive.
+
+For KIS-V, compare visual embeddings/keyframes; for KIS-T, rely on temporal retrieval from textual cues.
+
+Interaction & message protocol (for Interactive Track — LLMs as components)
+
+When an LLM is part of an interactive pipeline, use structured messages so external controllers can parse them reliably:
+
+System prompt / controller → LLM: JSON with task, query, context and allowed_actions.
+
+LLM → Controller: JSON with action and payload.
+
+Example request to LLM (system prompt):
+
+{
+  "role":"system",
+  "task":"vcMr_interactive",
+  "query":"A woman places a framed picture on the wall and later drives to a store; what are the names of the two women?",
+  "context": {"video_catalog_id":"v1"},
+  "allowed_actions":["predict_moment","ask_clarifying_question","return_explanation"]
+}
+
+
+Example LLM reply:
+
+{
+  "action":"predict_moment",
+  "payload": {"video_id":"vid_123","start_time":34.2,"end_time":41.8,"score":0.87}
+}
+
+
+Feedback loop: controller returns human feedback as defined earlier; LLM must accept refine feedback and produce an updated predict_moment.
+
+Implementation tips for LLM-centric systems (how LLMs should be used)
+
+Query understanding & reformulation
+
+Use LLM to canonicalize queries: extract entities, temporal constraints, actions, and synonyms. Output a structured query object {entities, time_constraints, modalities}.
+
+Candidate retrieval (index layer)
+
+Use dense/sparse retrieval over multimodal indices (CLIP, ASR embeddings, text embeddings). LLM provides re-ranking instructions rather than brute force reranking on raw tokens.
+
+Temporal localization
+
+Use coarse-to-fine approach: retrieve candidate shots/keyframes, then predict precise start/end using cross-modal alignment models (e.g., frame-level transformer or a temporal localizer). LLM supplies heuristics and merges textual cues to narrow windows.
+
+Re-ranking & scoring
+
+Use LLM as a reranker that ingests (query, candidate_snippet_text, keyframe_captions, ASR snippet) and returns a relevance score and short rationale. Use the notes field to provide RATIONALES for explainability.
+
+Interactive feedback handling
+
+Convert human feedback into structured constraints (e.g., {"must_have":["red sign"],"time_window":[10,60]}) and re-query index. LLMs are ideal for interpreting free-text refinements into filter tokens.
+
+Evidence & provenance
+
+Always return evidence (timestamps or frame IDs) with answers for verification and adjudication.
+
+Speed & system constraints
+
+In interactive (timed) runs, prefer lighter LLM prompts + precomputed embeddings; avoid heavy generation that blocks real-time interaction.
+
+Example end-to-end flow (VCMR Interactive — compact)
+
+Controller → LLM: structured query JSON.
+
+LLM → Controller: structural reformulation + retrieval query.
+
+Index returns top N shots.
+
+LLM reranker scores N shots and returns best (video_id,start,end,score) and rationale.
+
+Human gives feedback {relevance:false, refine:"focus on the sign colors"}.
+
+LLM transforms feedback into filters and repeats step 2–4 until stop or correct.
+
+Minimal checklist for compliance with competition rules (from slides)
+
+Use allowed pre-trained/commercial models and any provided resources (ASR, embeddings, keyframes).
+
+Output moment times in original video timeline (seconds or frames with fps).
+
+Respect top-K limits for automatic tasks (≤100).
+
+Support interactive feedback types (binary, graded, free-text).

@@ -8,9 +8,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from core.dependencies import get_app_settings
-from core.settings import AppSettings   
-from factory.enhanced_competition_factory import (
-    EnhancedCompetitionFactory,
+from core.settings import AppSettings, MongoDBSettings, KeyFrameIndexMilvusSetting  
+from models.keyframe import Keyframe
+from factory.factory import ServiceFactory
+from motor.motor_asyncio import AsyncIOMotorClient
+from beanie import init_beanie
+from router import keyframe_api, agent_api
+from factory.competition_factory import (
+    CompetitionFactory,
     validate_competition_setup
 )
 
@@ -21,13 +26,31 @@ app_state: Dict[str, Any] = {}
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Enhanced application lifespan with comprehensive initialization"""
+    """application lifespan with comprehensive initialization"""
     
     # Startup
-    print("🚀 Starting HCMC AI Challenge 2025 Enhanced System...")
+    print("🚀 Starting HCMC AI Challenge 2025 System...")
     
     try:
         settings = get_app_settings()
+
+        # Initialize MongoDB and Beanie (for repositories)
+        mongo_settings = MongoDBSettings()
+        milvus_settings = KeyFrameIndexMilvusSetting()
+        if mongo_settings.MONGO_URI:
+            mongo_connection_string = mongo_settings.MONGO_URI
+        else:
+            mongo_connection_string = (
+                f"mongodb://{mongo_settings.MONGO_USER}:{mongo_settings.MONGO_PASSWORD}"
+                f"@{mongo_settings.MONGO_HOST}:{mongo_settings.MONGO_PORT}/?authSource=admin"
+            )
+        mongo_client = AsyncIOMotorClient(mongo_connection_string)
+        await mongo_client.admin.command('ping')
+        database = mongo_client[mongo_settings.MONGO_DB]
+        await init_beanie(
+            database=database,
+            document_models=[Keyframe]
+        )
         
         # Validate competition setup
         validation_result = validate_competition_setup(
@@ -55,10 +78,10 @@ async def lifespan(app: FastAPI):
         print(f"   - ASR data: {'✓' if stats.get('asr_available') else '✗'}")
         print(f"   - Metadata: {'✓' if stats.get('metadata_available') else '✗'}")
         
-        # Create enhanced competition system
-        print("🔧 Initializing enhanced competition system...")
+        # Create competition system
+        print("🔧 Initializing competition system...")
         
-        factory = EnhancedCompetitionFactory(settings)
+        factory = CompetitionFactory(settings)
         
         competition_system = factory.create_full_competition_system(
             data_folder=getattr(settings, 'DATA_FOLDER', '/data/keyframes'),
@@ -75,11 +98,32 @@ async def lifespan(app: FastAPI):
             "settings": settings,
             "validation_result": validation_result
         })
+
+        # Initialize shared ServiceFactory and attach to app state for legacy dependencies
+        milvus_search_params = {
+            "metric_type": milvus_settings.METRIC_TYPE,
+            "params": milvus_settings.SEARCH_PARAMS
+        }
+        service_factory = ServiceFactory(
+            milvus_collection_name=milvus_settings.COLLECTION_NAME,
+            milvus_host=milvus_settings.HOST,
+            milvus_port=milvus_settings.PORT,
+            milvus_user="",
+            milvus_password="",
+            milvus_search_params=milvus_search_params,
+            model_name=settings.MODEL_NAME,
+            mongo_collection=Keyframe
+        )
+        app.state.service_factory = service_factory
+        app.state.mongo_client = mongo_client
         
-        # Include enhanced router
-        app.include_router(competition_system["router"])
+        # Include router
+        app.include_router(competition_system["router"]) 
+        # Backward-compatible routes for existing clients (e.g., /api/v1/keyframe/*)
+        app.include_router(keyframe_api.router, prefix="/api/v1")
+        app.include_router(agent_api.router, prefix='/api/v1')
         
-        print("✅ Enhanced competition system initialized successfully!")
+        print("✅ Competition system initialized successfully!")
         print(f"   - Available tasks: {len(competition_system['config']['available_tasks'])}")
         print(f"   - Optimization profile: {competition_system['config']['optimization_profile']}")
         
@@ -91,11 +135,11 @@ async def lifespan(app: FastAPI):
         yield
         
     except Exception as e:
-        print(f"❌ Failed to initialize enhanced system: {e}")
+        print(f"❌ Failed to initialize system: {e}")
         raise
     
     # Shutdown
-    print("🛑 Shutting down enhanced competition system...")
+    print("🛑 Shutting down competition system...")
     
     # Cleanup resources
     if "competition_system" in app_state:
@@ -116,11 +160,11 @@ async def lifespan(app: FastAPI):
     print("✅ Shutdown complete")
 
 
-def create_enhanced_app() -> FastAPI:
-    """Create enhanced FastAPI application"""
+def create_app() -> FastAPI:
+    """Create FastAPI application"""
     
     app = FastAPI(
-        title="HCMC AI Challenge 2025 - Enhanced System",
+        title="HCMC AI Challenge 2025 - System",
         description="Advanced multimodal video retrieval and QA system with competition optimizations",
         version="2.0.0",
         lifespan=lifespan,
@@ -137,10 +181,10 @@ def create_enhanced_app() -> FastAPI:
         allow_headers=["*"],
     )
     
-    # Enhanced root endpoint
+    # root endpoint
     @app.get("/")
-    async def enhanced_root():
-        """Enhanced root endpoint with system information"""
+    async def root():
+        """ root endpoint with system information"""
         
         if "competition_system" not in app_state:
             return {"status": "initializing", "message": "System is starting up..."}
@@ -153,11 +197,11 @@ def create_enhanced_app() -> FastAPI:
         
         return {
             "status": "operational",
-            "system": "HCMC AI Challenge 2025 - Enhanced",
+            "system": "HCMC AI Challenge 2025",
             "version": "2.0.0",
             "features": [
                 "Advanced multimodal video retrieval",
-                "Enhanced temporal localization",
+                "Temporal localization",
                 "Intelligent query processing",
                 "Real-time interactive feedback",
                 "Performance optimization",
@@ -186,10 +230,10 @@ def create_enhanced_app() -> FastAPI:
             }
         }
     
-    # Enhanced status endpoint
+    # status endpoint
     @app.get("/status")
-    async def enhanced_status():
-        """Enhanced status endpoint with detailed system information"""
+    async def status():
+        """ status endpoint with detailed system information"""
         
         if "competition_system" not in app_state:
             return JSONResponse(
@@ -317,8 +361,8 @@ async def _warm_up_system(competition_system: Dict[str, Any]):
         print(f"⚠️  Warmup failed (system will still work): {e}")
 
 
-# Create the enhanced application
-app = create_enhanced_app()
+# Create the application
+app = create_app()
 
 
 if __name__ == "__main__":

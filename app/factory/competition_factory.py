@@ -1,6 +1,6 @@
 """
-Enhanced Competition Factory for HCMC AI Challenge 2025
-Creates and configures enhanced competition components with optimized settings
+Competition Factory for HCMC AI Challenge 2025
+Creates and configures competition components with optimized settings
 """
 
 import os
@@ -11,9 +11,9 @@ from typing import Dict, Any, Optional, List
 from llama_index.core.llms import LLM
 from llama_index.llms.openai import OpenAI
 
-from agent.enhanced_competition_agent import EnhancedCompetitionAgent
-from controller.enhanced_competition_controller import EnhancedCompetitionController
-from router.enhanced_competition_api import create_enhanced_competition_router
+from agent.competition_agent import CompetitionAgent
+from controller.competition_controller import CompetitionController
+from router.competition_api import create_competition_router
 from service.search_service import KeyframeQueryService
 from service.model_service import ModelService
 from core.settings import AppSettings
@@ -22,11 +22,12 @@ from factory.factory import ServiceFactory
 from models.keyframe import Keyframe
 
 
-class EnhancedCompetitionFactory:
-    """Factory for creating enhanced competition components"""
+class CompetitionFactory:
+    """Factory for creating competition components"""
     
     def __init__(self, settings: AppSettings):
         self.settings = settings
+        self._service_factory: Optional[ServiceFactory] = None
         self._llm: Optional[LLM] = None
         self._keyframe_service: Optional[KeyframeQueryService] = None
         self._model_service: Optional[ModelService] = None
@@ -57,8 +58,9 @@ class EnhancedCompetitionFactory:
         """Create keyframe query service with optimized settings"""
         
         if self._keyframe_service is None:
-            # Initialize with competition-optimized parameters
-            self._keyframe_service = KeyframeQueryService()
+            # Initialize via the shared ServiceFactory to ensure proper dependencies
+            service_factory = self._get_or_create_service_factory()
+            self._keyframe_service = service_factory.get_keyframe_query_service()
             
             # Apply performance optimizations
             self._optimize_keyframe_service()
@@ -66,10 +68,12 @@ class EnhancedCompetitionFactory:
         return self._keyframe_service
     
     def create_model_service(self) -> ModelService:
-        """Create model service with enhanced embedding capabilities"""
+        """Create model service with embedding capabilities"""
         
         if self._model_service is None:
-            self._model_service = ModelService()
+            # Use ServiceFactory to construct a properly initialized ModelService
+            service_factory = self._get_or_create_service_factory()
+            self._model_service = service_factory.get_model_service()
             
             # Apply model optimizations
             self._optimize_model_service()
@@ -124,14 +128,14 @@ class EnhancedCompetitionFactory:
         
         return self._asr_data
     
-    def create_enhanced_agent(
+    def create_agent(
         self,
         data_folder: Optional[str] = None,
         video_metadata_path: Optional[str] = None,
         objects_file_path: Optional[str] = None,
         asr_file_path: Optional[str] = None
-    ) -> EnhancedCompetitionAgent:
-        """Create enhanced competition agent with all components"""
+    ) -> CompetitionAgent:
+        """Create competition agent with all components"""
         
         # Initialize core services
         llm = self.create_llm()
@@ -146,8 +150,8 @@ class EnhancedCompetitionFactory:
         data_folder = data_folder or self._get_default_data_folder()
         video_metadata_path = Path(video_metadata_path) if video_metadata_path else None
         
-        # Create enhanced agent
-        agent = EnhancedCompetitionAgent(
+        # Create agent
+        agent = CompetitionAgent(
             llm=llm,
             keyframe_service=keyframe_service,
             model_service=model_service,
@@ -159,14 +163,14 @@ class EnhancedCompetitionFactory:
         
         return agent
     
-    def create_enhanced_controller(
+    def create_controller(
         self,
         data_folder: Optional[str] = None,
         video_metadata_path: Optional[str] = None,
         objects_file_path: Optional[str] = None,
         asr_file_path: Optional[str] = None
-    ) -> EnhancedCompetitionController:
-        """Create enhanced competition controller"""
+    ) -> CompetitionController:
+        """Create competition controller"""
         
         # Initialize core services
         llm = self.create_llm()
@@ -181,8 +185,8 @@ class EnhancedCompetitionFactory:
         data_folder = data_folder or self._get_default_data_folder()
         video_metadata_path = Path(video_metadata_path) if video_metadata_path else None
         
-        # Create enhanced controller
-        controller = EnhancedCompetitionController(
+        # Create controller
+        controller = CompetitionController(
             llm=llm,
             keyframe_service=keyframe_service,
             model_service=model_service,
@@ -194,17 +198,17 @@ class EnhancedCompetitionFactory:
         
         return controller
     
-    def create_enhanced_api_router(
+    def create_api_router(
         self,
         data_folder: Optional[str] = None,
         video_metadata_path: Optional[str] = None,
         objects_file_path: Optional[str] = None,
         asr_file_path: Optional[str] = None
     ):
-        """Create enhanced API router with all components"""
+        """Create API router with all components"""
         
         # Create controller
-        controller = self.create_enhanced_controller(
+        controller = self.create_controller(
             data_folder=data_folder,
             video_metadata_path=video_metadata_path,
             objects_file_path=objects_file_path,
@@ -212,7 +216,7 @@ class EnhancedCompetitionFactory:
         )
         
         # Create router
-        router = create_enhanced_competition_router(controller)
+        router = create_competition_router(controller)
         
         return router, controller
     
@@ -230,21 +234,21 @@ class EnhancedCompetitionFactory:
         self._apply_optimization_profile(optimization_profile)
         
         # Create all components
-        agent = self.create_enhanced_agent(
+        agent = self.create_agent(
             data_folder=data_folder,
             video_metadata_path=video_metadata_path,
             objects_file_path=objects_file_path,
             asr_file_path=asr_file_path
         )
         
-        controller = self.create_enhanced_controller(
+        controller = self.create_controller(
             data_folder=data_folder,
             video_metadata_path=video_metadata_path,
             objects_file_path=objects_file_path,
             asr_file_path=asr_file_path
         )
         
-        router = create_enhanced_competition_router(controller)
+        router = create_competition_router(controller)
         
         # Create system configuration
         system_config = {
@@ -280,6 +284,30 @@ class EnhancedCompetitionFactory:
         }
     
     # Private helper methods
+    def _get_or_create_service_factory(self) -> ServiceFactory:
+        """Create or return a cached ServiceFactory configured from settings"""
+        if self._service_factory is not None:
+            return self._service_factory
+
+        milvus_settings = KeyFrameIndexMilvusSetting()
+
+        milvus_search_params = {
+            "metric_type": milvus_settings.METRIC_TYPE,
+            "params": milvus_settings.SEARCH_PARAMS
+        }
+
+        self._service_factory = ServiceFactory(
+            milvus_collection_name=milvus_settings.COLLECTION_NAME,
+            milvus_host=milvus_settings.HOST,
+            milvus_port=milvus_settings.PORT,
+            milvus_user="",
+            milvus_password="",
+            milvus_search_params=milvus_search_params,
+            model_name=self.settings.MODEL_NAME,
+            mongo_collection=Keyframe
+        )
+
+        return self._service_factory
     
     def _optimize_keyframe_service(self):
         """Apply performance optimizations to keyframe service"""
@@ -370,7 +398,7 @@ def create_competition_system_for_evaluation(
     from core.settings import AppSettings
     
     settings = AppSettings()
-    factory = EnhancedCompetitionFactory(settings)
+    factory = CompetitionFactory(settings)
     
     return factory.create_full_competition_system(
         data_folder=data_folder,

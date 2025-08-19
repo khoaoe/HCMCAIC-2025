@@ -45,7 +45,7 @@ class VCMRAgent:
         self.data_folder = data_folder
         self.query_extractor = VisualEventExtractor(llm)
         
-        # Enhanced reranking prompt
+        # reranking prompt
         self.rerank_prompt = PromptTemplate(
             """
             You are an expert video moment retrieval system. Given a query and candidate moments, 

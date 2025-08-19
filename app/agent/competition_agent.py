@@ -1,10 +1,11 @@
 """
-Enhanced Competition Agent for HCMC AI Challenge 2025
+ Competition Agent for HCMC AI Challenge 2025
 Implements advanced multimodal fusion, sophisticated temporal localization,
 and optimized performance for all competition tasks
 """
 
 from typing import List, Dict, Any, Optional, Tuple, Union
+import time
 import numpy as np
 import json
 import re
@@ -32,7 +33,7 @@ from schema.competition import (
 
 
 class AdvancedQueryProcessor:
-    """Enhanced query processing with semantic understanding and expansion"""
+    """ query processing with semantic understanding and expansion"""
     
     def __init__(self, llm: LLM, model_service: ModelService):
         self.llm = llm
@@ -160,7 +161,7 @@ class AdvancedQueryProcessor:
 
 
 class AdvancedVisualMatcher:
-    """Enhanced visual similarity matching for KIS-V tasks"""
+    """ visual similarity matching for KIS-V tasks"""
     
     def __init__(self, model_service: ModelService, data_folder: str):
         self.model_service = model_service
@@ -175,14 +176,14 @@ class AdvancedVisualMatcher:
         """Find visual matches using advanced similarity metrics"""
         
         try:
-            # For now, implement as enhanced textual matching
+            # For now, implement as  textual matching
             # In production, this would use visual feature extraction from query_clip_path
             
             # Extract representative frames from query clip (placeholder)
             # This would involve actual video processing in production
             query_description = await self._extract_visual_description(query_clip_path)
             
-            # Use enhanced embedding comparison
+            # Use  embedding comparison
             query_embedding = self.model_service.embedding(query_description).tolist()[0]
             
             similarities = []
@@ -389,7 +390,7 @@ class EnhancedLLMReranker:
 
 
 class AdvancedTemporalRefiner:
-    """Enhanced temporal boundary refinement"""
+    """ temporal boundary refinement"""
     
     def __init__(self, temporal_localizer: TemporalLocalizer, asr_aligner: ASRTemporalAligner):
         self.temporal_localizer = temporal_localizer
@@ -486,7 +487,7 @@ class AdvancedTemporalRefiner:
 
 class EnhancedCompetitionAgent:
     """
-    Enhanced agent with advanced multimodal fusion and sophisticated processing
+     agent with advanced multimodal fusion and sophisticated processing
     """
     
     def __init__(
@@ -507,7 +508,7 @@ class EnhancedCompetitionAgent:
         self.asr_aligner = ASRTemporalAligner(asr_data)
         self.performance_optimizer = PerformanceOptimizer()
         
-        # Initialize enhanced modules
+        # Initialize  modules
         self.query_processor = AdvancedQueryProcessor(llm, model_service)
         self.visual_matcher = AdvancedVisualMatcher(model_service, data_folder)
         self.llm_reranker = EnhancedLLMReranker(llm)
@@ -525,7 +526,7 @@ class EnhancedCompetitionAgent:
         self, 
         request: VCMRAutomaticRequest
     ) -> VCMRAutomaticResponse:
-        """Enhanced VCMR automatic with advanced processing"""
+        """ VCMR automatic with advanced processing"""
         
         start_time = time.time()
         
@@ -568,7 +569,7 @@ class EnhancedCompetitionAgent:
                 unique_keyframes, target_moments=request.top_k * 2
             )
             
-            # Stage 5: Create enhanced moments with multimodal context
+            # Stage 5: Create  moments with multimodal context
             enhanced_moments = []
             for cluster in moment_clusters:
                 moment = self.temporal_localizer.create_moment_from_keyframes(cluster)
@@ -614,7 +615,7 @@ class EnhancedCompetitionAgent:
                     score=moment.confidence_score
                 ))
             
-            # Generate enhanced explanation
+            # Generate  explanation
             notes = self._generate_result_explanation(request.query, final_moments[:3])
             
             # Track performance
@@ -629,7 +630,7 @@ class EnhancedCompetitionAgent:
             )
             
         except Exception as e:
-            print(f"Error in enhanced VCMR: {e}")
+            print(f"Error in  VCMR: {e}")
             # Fallback to basic search
             return await self._fallback_vcmr(request)
     
@@ -637,7 +638,7 @@ class EnhancedCompetitionAgent:
         self, 
         request: VideoQARequest
     ) -> VideoQAResponse:
-        """Enhanced Video QA with comprehensive evidence tracking"""
+        """ Video QA with comprehensive evidence tracking"""
         
         try:
             # Parse video identifier
@@ -648,7 +649,7 @@ class EnhancedCompetitionAgent:
             else:
                 raise ValueError(f"Invalid video_id format: {request.video_id}")
             
-            # Enhanced question analysis
+            #  question analysis
             question_analysis = await self.query_processor.analyze_and_expand_query(request.question)
             
             # Adaptive search based on question type
@@ -664,7 +665,7 @@ class EnhancedCompetitionAgent:
                 evidence_keyframes, request.question
             )
             
-            # Generate answer with enhanced prompting
+            # Generate answer with  prompting
             answer, confidence = await self._generate_enhanced_qa_answer(
                 request, visual_context, question_analysis
             )
@@ -681,7 +682,7 @@ class EnhancedCompetitionAgent:
             )
             
         except Exception as e:
-            print(f"Error in enhanced Video QA: {e}")
+            print(f"Error in  Video QA: {e}")
             return VideoQAResponse(
                 video_id=request.video_id,
                 question=request.question,
@@ -694,10 +695,10 @@ class EnhancedCompetitionAgent:
         self, 
         request: KISTextualRequest
     ) -> KISResponse:
-        """Enhanced KIS textual with precision optimization"""
+        """ KIS textual with precision optimization"""
         
         try:
-            # Enhanced description analysis for exact matching
+            #  description analysis for exact matching
             description_analysis = await self.query_processor.analyze_and_expand_query(
                 request.text_description
             )
@@ -750,14 +751,14 @@ class EnhancedCompetitionAgent:
             )
             
         except Exception as e:
-            print(f"Error in enhanced KIS textual: {e}")
+            print(f"Error in  KIS textual: {e}")
             raise ValueError(f"KIS textual search failed: {e}")
     
     async def enhanced_kis_visual(
         self, 
         request: KISVisualRequest
     ) -> KISResponse:
-        """Enhanced KIS visual with advanced visual matching"""
+        """ KIS visual with advanced visual matching"""
         
         try:
             # First, get candidate keyframes using broad search
@@ -792,7 +793,7 @@ class EnhancedCompetitionAgent:
             )
             
         except Exception as e:
-            print(f"Error in enhanced KIS visual: {e}")
+            print(f"Error in  KIS visual: {e}")
             raise ValueError(f"KIS visual search failed: {e}")
     
     async def enhanced_kis_progressive(
@@ -801,7 +802,7 @@ class EnhancedCompetitionAgent:
         session_id: str,
         additional_hints: Optional[List[str]] = None
     ) -> KISResponse:
-        """Enhanced KIS progressive with session state management"""
+        """ KIS progressive with session state management"""
         
         try:
             # Initialize or update session state
@@ -867,7 +868,7 @@ class EnhancedCompetitionAgent:
             )
             
         except Exception as e:
-            print(f"Error in enhanced KIS progressive: {e}")
+            print(f"Error in  KIS progressive: {e}")
             raise ValueError(f"KIS progressive search failed: {e}")
     
     # Helper methods
@@ -876,7 +877,7 @@ class EnhancedCompetitionAgent:
         self, 
         keyframes: List[KeyframeServiceReponse]
     ) -> List[KeyframeServiceReponse]:
-        """Enhanced deduplication with score fusion"""
+        """ deduplication with score fusion"""
         
         keyframe_map = {}
         for kf in keyframes:
@@ -1055,7 +1056,7 @@ class EnhancedCompetitionAgent:
         visual_context: List[Dict[str, Any]],
         question_analysis: Dict[str, Any]
     ) -> Tuple[str, float]:
-        """Generate enhanced QA answer with visual evidence"""
+        """Generate  QA answer with visual evidence"""
         
         # Prepare chat messages with visual content
         chat_messages = []
@@ -1078,7 +1079,7 @@ class EnhancedCompetitionAgent:
                     content=message_content
                 ))
         
-        # Prepare enhanced QA prompt
+        # Prepare  QA prompt
         qa_prompt = CompetitionPrompts.VIDEO_QA_ANSWER
         
         # Context information
@@ -1196,5 +1197,5 @@ class EnhancedCompetitionAgent:
         return base_metrics
 
 
-# Export the enhanced agent as the main competition agent
+# Export the  agent as the main competition agent
 CompetitionAgent = EnhancedCompetitionAgent

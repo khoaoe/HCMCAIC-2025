@@ -1,279 +1,565 @@
 """
-Competition API endpoints for HCMC AI Challenge 2025
-Implements exact task specifications for VCMR, VQA, and KIS
+Competition API Router for HCMC AI Challenge 2025
+Provides optimized endpoints for all competition tasks with advanced features
 """
 
-from fastapi import APIRouter, Depends, HTTPException
-from typing import Dict, Any, List, Optional
+import time
+from typing import Dict, Any, Optional, List
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, Body
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 
+from controller.competition_controller import CompetitionController
 from schema.competition import (
     VCMRAutomaticRequest, VCMRAutomaticResponse,
     VideoQARequest, VideoQAResponse,
     KISVisualRequest, KISTextualRequest, KISProgressiveRequest, KISResponse,
-    VCMRFeedback, VCMRInteractiveCandidate
+    VCMRFeedback, VCMRInteractiveCandidate,
+    InteractiveSystemRequest, InteractiveLLMResponse
 )
-from controller.competition_controller import CompetitionController
-from core.dependencies import get_competition_controller
-from core.logger import SimpleLogger
 
 
-router = APIRouter(
-    prefix="/competition",
-    tags=["competition"],
-    responses={404: {"description": "Not found"}},
-)
-logger = SimpleLogger(__name__)
+# Additional request/response models for features
+class BatchVCMRRequest(BaseModel):
+    """Batch processing request for multiple VCMR queries"""
+    queries: List[VCMRAutomaticRequest] = Field(..., min_items=1, max_items=10)
+    parallel_processing: bool = Field(default=True, description="Process queries in parallel")
 
 
-@router.post(
-    "/vcmr/automatic",
-    response_model=VCMRAutomaticResponse,
-    summary="VCMR Automatic Task",
-    description="""
-    Video Corpus Moment Retrieval - Automatic Track
+class BatchVCMRResponse(BaseModel):
+    """Batch processing response for multiple VCMR queries"""
+    results: List[VCMRAutomaticResponse]
+    processing_time: float
+    success_count: int
+    failed_queries: List[Dict[str, Any]]
+
+
+class InteractiveFeedbackRequest(BaseModel):
+    """Interactive feedback request"""
+    session_id: str
+    feedback: Dict[str, Any]
+
+
+class SessionInfoResponse(BaseModel):
+    """Session information response"""
+    session_id: str
+    original_query: Optional[str]
+    interaction_count: int
+    feedback_count: int
+    last_candidate: Optional[Dict[str, Any]]
+    session_active: bool
+
+
+class PerformanceMetricsResponse(BaseModel):
+    """System performance metrics response"""
+    agent_performance: Dict[str, Any]
+    controller_performance: Dict[str, Any]
+    system_status: str
+    recommendations: Optional[List[str]]
+
+
+def create_competition_router(controller: CompetitionController) -> APIRouter:
+    """Create competition API router with advanced features"""
     
-    Find relevant temporal segments (moments) across a large video corpus given a free-form text query.
-    Returns a ranked top-K list of moment candidates with start/end times and confidence scores.
+    router = APIRouter(prefix="/competition/v2", tags=["Competition"])
     
-    **Input Requirements:**
-    - query: Free-form natural language describing the desired moment
-    - corpus_index: Identifier for the corpus version being searched
-    - top_k: Maximum number of candidates to return (≤100)
-    - video_catalog: Optional video metadata (uses local index if not provided)
+    # ===============================
+    # VCMR (Video Corpus Moment Retrieval) Endpoints
+    # ===============================
     
-    **Output Format:**
-    - Ranked list of moment candidates with temporal boundaries
-    - Each candidate includes video_id, start_time, end_time, and relevance score
-    - Optional notes explaining top candidate relevance
+    @router.post("/vcmr/automatic", response_model=VCMRAutomaticResponse)
+    async def vcmr_automatic(
+        request: VCMRAutomaticRequest,
+        background_tasks: BackgroundTasks
+    ) -> VCMRAutomaticResponse:
+        """
+        VCMR Automatic task with advanced multimodal fusion
+        
+        Features:
+        - Advanced query understanding and expansion
+        - Multi-modal retrieval with cross-modal reranking
+        - Intelligent temporal clustering
+        - Performance optimization
+        """
+        try:
+            response = await controller.process_vcmr_automatic(request)
+            
+            # Background task for performance monitoring
+            background_tasks.add_task(
+                _log_request_performance, 
+                "vcmr_automatic", 
+                request.query, 
+                len(response.candidates)
+            )
+            
+            return response
+            
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
     
-    **Example:**
-    ```json
-    {
-        "task": "vcMr_automatic",
-        "query": "A woman places a framed picture on the wall",
-        "corpus_index": "v1",
-        "top_k": 10
-    }
-    ```
-    """,
-    response_description="Ranked list of temporal moment candidates"
-)
-async def vcmr_automatic(
-    request: VCMRAutomaticRequest,
-    controller: CompetitionController = Depends(get_competition_controller)
+    @router.post("/vcmr/batch", response_model=BatchVCMRResponse)
+    async def batch_vcmr_automatic(
+        request: BatchVCMRRequest
+    ) -> BatchVCMRResponse:
+        """
+        Batch processing for multiple VCMR queries
+        
+        Features:
+        - Parallel or sequential processing
+        - Aggregated performance metrics
+        - Error handling per query
+        """
+        import time
+        import asyncio
+        
+        start_time = time.time()
+        results = []
+        failed_queries = []
+        
+        try:
+            if request.parallel_processing:
+                # Process queries in parallel
+                tasks = [
+                    controller.process_vcmr_automatic(vcmr_request)
+                    for vcmr_request in request.queries
+                ]
+                
+                responses = await asyncio.gather(*tasks, return_exceptions=True)
+                
+                for i, response in enumerate(responses):
+                    if isinstance(response, Exception):
+                        failed_queries.append({
+                            "query_index": i,
+                            "query": request.queries[i].query,
+                            "error": str(response)
+                        })
+                    else:
+                        results.append(response)
+            else:
+                # Process queries sequentially
+                for i, vcmr_request in enumerate(request.queries):
+                    try:
+                        response = await controller.process_vcmr_automatic(vcmr_request)
+                        results.append(response)
+                    except Exception as e:
+                        failed_queries.append({
+                            "query_index": i,
+                            "query": vcmr_request.query,
+                            "error": str(e)
+                        })
+            
+            processing_time = time.time() - start_time
+            
+            return BatchVCMRResponse(
+                results=results,
+                processing_time=processing_time,
+                success_count=len(results),
+                failed_queries=failed_queries
+            )
+            
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Batch processing failed: {str(e)}")
+    
+    @router.post("/vcmr/interactive", response_model=Dict[str, Any])
+    async def vcmr_interactive(
+        query: str = Body(..., embed=True),
+        session_id: Optional[str] = Query(None),
+        feedback: Optional[VCMRFeedback] = Body(None),
+        previous_candidates: Optional[List[VCMRInteractiveCandidate]] = Body(None)
+    ) -> Dict[str, Any]:
+        """
+        VCMR Interactive task with session management
+        
+        Features:
+        - Session state management
+        - Intelligent feedback integration
+        - Real-time refinement
+        """
+        try:
+            result_candidate, session_id = await controller.process_vcmr_interactive(
+                query=query,
+                session_id=session_id,
+                feedback=feedback,
+                previous_candidates=previous_candidates
+            )
+            
+            return {
+                "candidate": {
+                    "video_id": result_candidate.video_id,
+                    "start_time": result_candidate.start_time,
+                    "end_time": result_candidate.end_time,
+                    "score": result_candidate.score
+                },
+                "session_id": session_id,
+                "interaction_count": controller.interactive_sessions[session_id]["interaction_count"]
+            }
+            
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+    
+    # ===============================
+    # Video QA Endpoints
+    # ===============================
+    
+    @router.post("/vqa", response_model=VideoQAResponse)
+    async def video_qa(
+        request: VideoQARequest,
+        background_tasks: BackgroundTasks
+    ) -> VideoQAResponse:
+        """
+        Video QA with comprehensive evidence tracking
+        
+        Features:
+        - Advanced question analysis
+        - Multi-modal evidence gathering
+        - Detailed confidence scoring
+        - Evidence provenance tracking
+        """
+        try:
+            response = await controller.process_video_qa(request)
+            
+            # Background task for performance monitoring
+            background_tasks.add_task(
+                _log_request_performance,
+                "video_qa",
+                request.question,
+                len(response.evidence) if response.evidence else 0
+            )
+            
+            return response
+            
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+    
+    # ===============================
+    # KIS (Known-Item Search) Endpoints
+    # ===============================
+    
+    @router.post("/kis/textual", response_model=KISResponse)
+    async def kis_textual(
+        request: KISTextualRequest
+    ) -> KISResponse:
+        """
+        KIS Textual with precision optimization
+        
+        Features:
+        - Advanced description analysis
+        - Multiple search strategies
+        - Exact matching optimization
+        """
+        try:
+            response = await controller.process_kis_textual(request)
+            return response
+            
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+    
+    @router.post("/kis/visual", response_model=KISResponse)
+    async def kis_visual(
+        request: KISVisualRequest
+    ) -> KISResponse:
+        """
+        KIS Visual with advanced visual matching
+        
+        Features:
+        - Visual similarity analysis
+        - Feature-based matching
+        - Precise temporal localization
+        """
+        try:
+            response = await controller.process_kis_visual(request)
+            return response
+            
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+    
+    @router.post("/kis/progressive", response_model=Dict[str, Any])
+    async def kis_progressive(
+        request: KISProgressiveRequest,
+        session_id: Optional[str] = Query(None),
+        additional_hints: Optional[List[str]] = Query(None)
+    ) -> Dict[str, Any]:
+        """
+        KIS Progressive with session state management
+        
+        Features:
+        - Progressive hint integration
+        - Session state tracking
+        - Intelligent hint combination
+        """
+        try:
+            response, session_id = await controller.process_kis_progressive(
+                request=request,
+                session_id=session_id,
+                additional_hints=additional_hints
+            )
+            
+            session_info = controller.agent.session_state.get(session_id, {})
+            
+            return {
+                "match": {
+                    "video_id": response.video_id,
+                    "start_time": response.start_time,
+                    "end_time": response.end_time,
+                    "match_confidence": response.match_confidence
+                },
+                "session_id": session_id,
+                "hints_used": len(session_info.get("all_hints", [])),
+                "search_iterations": len(session_info.get("search_history", []))
+            }
+            
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+    
+    # ===============================
+    # Interactive System Endpoints
+    # ===============================
+    
+    @router.post("/interactive/system", response_model=InteractiveLLMResponse)
+    async def process_interactive_system_request(
+        request: InteractiveSystemRequest
+    ) -> InteractiveLLMResponse:
+        """
+        Process interactive system requests for LLM integration
+        
+        Features:
+        - Structured LLM interaction
+        - Action-based responses
+        - Context-aware processing
+        """
+        try:
+            response = await controller.process_interactive_system_request(request)
+            return response
+            
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+    
+    @router.post("/interactive/feedback", response_model=Dict[str, Any])
+    async def handle_interactive_feedback(
+        request: InteractiveFeedbackRequest
+    ) -> Dict[str, Any]:
+        """
+        Handle feedback for interactive sessions
+        
+        Features:
+        - Multi-modal feedback integration
+        - Session state updates
+        - Real-time refinement
+        """
+        try:
+            result = await controller.handle_interactive_feedback(
+                session_id=request.session_id,
+                feedback=request.feedback
+            )
+            return result
+            
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+    
+    # ===============================
+    # Session Management Endpoints
+    # ===============================
+    
+    @router.get("/session/{session_id}", response_model=SessionInfoResponse)
+    async def get_session_info(session_id: str) -> SessionInfoResponse:
+        """
+        Get information about an interactive session
+        
+        Features:
+        - Session state retrieval
+        - Interaction history
+        - Progress tracking
+        """
+        try:
+            session_info = controller.get_session_info(session_id)
+            
+            if "error" in session_info:
+                raise HTTPException(status_code=404, detail=session_info["error"])
+            
+            return SessionInfoResponse(**session_info)
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+    
+    @router.delete("/session/{session_id}")
+    async def clear_session(session_id: str) -> Dict[str, str]:
+        """
+        Clear an interactive session
+        
+        Features:
+        - Session cleanup
+        - Memory management
+        """
+        try:
+            if session_id in controller.interactive_sessions:
+                del controller.interactive_sessions[session_id]
+                return {"message": f"Session {session_id} cleared successfully"}
+            else:
+                raise HTTPException(status_code=404, detail="Session not found")
+                
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+    
+    # ===============================
+    # Performance and Monitoring Endpoints
+    # ===============================
+    
+    @router.get("/metrics", response_model=PerformanceMetricsResponse)
+    async def get_performance_metrics() -> PerformanceMetricsResponse:
+        """
+        Get comprehensive system performance metrics
+        
+        Features:
+        - Task performance statistics
+        - System health indicators
+        - Optimization recommendations
+        """
+        try:
+            metrics = controller.get_performance_metrics()
+            
+            # Generate recommendations based on metrics
+            recommendations = _generate_performance_recommendations(metrics)
+            
+            return PerformanceMetricsResponse(
+                agent_performance=metrics.get("agent_performance", {}),
+                controller_performance=metrics.get("controller_performance", {}),
+                system_status=metrics.get("system_status", "unknown"),
+                recommendations=recommendations
+            )
+            
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+    
+    @router.get("/health")
+    async def health_check() -> Dict[str, Any]:
+        """
+        System health check endpoint
+        
+        Features:
+        - System status verification
+        - Component health checks
+        - Performance indicators
+        """
+        try:
+            metrics = controller.get_performance_metrics()
+            
+            return {
+                "status": "healthy" if metrics.get("system_status") == "operational" else "degraded",
+                "timestamp": time.time(),
+                "components": {
+                    "agent": "operational",
+                    "controller": "operational",
+                    "performance_optimizer": "operational"
+                },
+                "active_sessions": metrics.get("controller_performance", {}).get("active_sessions", 0)
+            }
+            
+        except Exception as e:
+            return {
+                "status": "error",
+                "timestamp": time.time(),
+                "error": str(e)
+            }
+    
+    # ===============================
+    # Utility Endpoints
+    # ===============================
+    
+    @router.post("/utils/validate", response_model=Dict[str, Any])
+    async def validate_request(
+        task_type: str = Body(...),
+        request_data: Dict[str, Any] = Body(...)
+    ) -> Dict[str, Any]:
+        """
+        Validate request data for different task types
+        
+        Features:
+        - Request validation
+        - Schema compliance checking
+        - Error reporting
+        """
+        try:
+            validation_result = {"valid": True, "errors": []}
+            
+            if task_type == "vcmr_automatic":
+                try:
+                    VCMRAutomaticRequest(**request_data)
+                except Exception as e:
+                    validation_result["valid"] = False
+                    validation_result["errors"].append(str(e))
+            
+            elif task_type == "video_qa":
+                try:
+                    VideoQARequest(**request_data)
+                except Exception as e:
+                    validation_result["valid"] = False
+                    validation_result["errors"].append(str(e))
+            
+            elif task_type in ["kis_textual", "kis_visual", "kis_progressive"]:
+                try:
+                    if task_type == "kis_textual":
+                        KISTextualRequest(**request_data)
+                    elif task_type == "kis_visual":
+                        KISVisualRequest(**request_data)
+                    elif task_type == "kis_progressive":
+                        KISProgressiveRequest(**request_data)
+                except Exception as e:
+                    validation_result["valid"] = False
+                    validation_result["errors"].append(str(e))
+            
+            else:
+                validation_result["valid"] = False
+                validation_result["errors"].append(f"Unknown task type: {task_type}")
+            
+            return validation_result
+            
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+    
+    return router
+
+
+# Helper functions
+
+async def _log_request_performance(
+    task_type: str, 
+    query: str, 
+    result_count: int
 ):
-    """Process VCMR Automatic task"""
-    logger.info(f"VCMR Automatic request: query='{request.query}', top_k={request.top_k}")
-    
-    try:
-        response = await controller.process_vcmr_automatic(request)
-        logger.info(f"VCMR Automatic completed: {len(response.candidates)} candidates")
-        return response
-    except Exception as e:
-        logger.error(f"VCMR Automatic error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"VCMR processing error: {str(e)}")
+    """Background task for logging request performance"""
+    # This would log to monitoring system in production
+    print(f"Task: {task_type}, Query: '{query[:50]}...', Results: {result_count}")
 
 
-@router.post(
-    "/vcmr/interactive",
-    response_model=VCMRInteractiveCandidate,
-    summary="VCMR Interactive Task", 
-    description="""
-    Video Corpus Moment Retrieval - Interactive Track
+def _generate_performance_recommendations(metrics: Dict[str, Any]) -> List[str]:
+    """Generate performance optimization recommendations"""
     
-    Provides single moment candidate and accepts human feedback to refine results.
-    Supports binary relevance, graded relevance, and free-text refinement feedback.
+    recommendations = []
     
-    **Feedback Types:**
-    - Binary: {"relevance": true|false}
-    - Graded: {"relevance_score": 0.8}
-    - Refinement: {"refine": "focus on outdoor scenes"}
-    """,
-    response_description="Single moment candidate or refined result"
-)
-async def vcmr_interactive(
-    query: str,
-    feedback: Optional[VCMRFeedback] = None,
-    controller: CompetitionController = Depends(get_competition_controller)
-):
-    """Process VCMR Interactive task with feedback"""
-    logger.info(f"VCMR Interactive request: query='{query}'")
+    # Check agent performance
+    agent_perf = metrics.get("agent_performance", {})
+    if agent_perf.get("avg_response_time", 0) > 10.0:
+        recommendations.append("Consider reducing search top_k or increasing score thresholds for faster response times")
     
-    try:
-        response = await controller.process_vcmr_interactive(query, feedback)
-        logger.info(f"VCMR Interactive completed: {response.video_id} ({response.start_time}s-{response.end_time}s)")
-        return response
-    except Exception as e:
-        logger.error(f"VCMR Interactive error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Interactive VCMR error: {str(e)}")
-
-
-@router.post(
-    "/vqa",
-    response_model=VideoQAResponse,
-    summary="Video Question Answering",
-    description="""
-    Answer natural language questions about video content.
+    # Check controller performance
+    controller_perf = metrics.get("controller_performance", {})
+    task_stats = controller_perf.get("task_statistics", {})
     
-    Supports both full video and clip-specific questions. Provides evidence timestamps
-    and confidence scores for verification.
+    for task_type, stats in task_stats.items():
+        if stats.get("success_rate", 1.0) < 0.9:
+            recommendations.append(f"Low success rate for {task_type}: consider tuning parameters")
+        if stats.get("avg_time", 0) > 15.0:
+            recommendations.append(f"High response time for {task_type}: consider optimization")
     
-    **Input Requirements:**
-    - question: Natural language question about the video
-    - video_id: Target video identifier  
-    - video_uri: Video location or encoded frames reference
-    - clip: Optional temporal clip specification
-    - context: Optional ASR, OCR, or metadata context
+    # Check system status
+    if metrics.get("system_status") != "operational":
+        recommendations.append("System performance is degraded - monitor resource usage and error rates")
     
-    **Output Format:**
-    - Short factual answer or closed-vocabulary label
-    - Supporting evidence with timestamps
-    - Model confidence score
+    if not recommendations:
+        recommendations.append("System is performing optimally")
     
-    **Example:**
-    ```json
-    {
-        "task": "video_qa",
-        "video_id": "L01/V001",
-        "video_uri": "path/to/video.mp4",
-        "question": "How many people are in the scene?",
-        "clip": {"start_time": 10.0, "end_time": 20.0}
-    }
-    ```
-    """,
-    response_description="Answer with supporting evidence and confidence"
-)
-async def video_qa(
-    request: VideoQARequest,
-    controller: CompetitionController = Depends(get_competition_controller)
-):
-    """Process Video QA task"""
-    logger.info(f"Video QA request: video='{request.video_id}', question='{request.question}'")
-    
-    try:
-        response = await controller.process_video_qa(request)
-        logger.info(f"Video QA completed: answer='{response.answer}', confidence={response.confidence}")
-        return response
-    except Exception as e:
-        logger.error(f"Video QA error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Video QA error: {str(e)}")
-
-
-@router.post(
-    "/kis/textual",
-    response_model=KISResponse,
-    summary="Known-Item Search - Textual",
-    description="""
-    Locate exact target segment from textual description.
-    
-    Requires precise matching to find the specific segment described.
-    Returns tight temporal boundaries around the exact match.
-    """,
-    response_description="Exact segment location with match confidence"
-)
-async def kis_textual(
-    request: KISTextualRequest,
-    controller: CompetitionController = Depends(get_competition_controller)
-):
-    """Process KIS Textual task"""
-    logger.info(f"KIS Textual request: description='{request.text_description}'")
-    
-    try:
-        response = await controller.process_kis_textual(request)
-        logger.info(f"KIS Textual completed: {response.video_id} ({response.start_time}s-{response.end_time}s)")
-        return response
-    except Exception as e:
-        logger.error(f"KIS Textual error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"KIS Textual error: {str(e)}")
-
-
-@router.post(
-    "/kis/visual",
-    response_model=KISResponse,
-    summary="Known-Item Search - Visual",
-    description="""
-    Locate exact target segment from visual example clip.
-    
-    Uses visual similarity matching to find the segment that matches
-    the provided query clip.
-    """,
-    response_description="Exact segment location with visual match confidence"
-)
-async def kis_visual(
-    request: KISVisualRequest,
-    controller: CompetitionController = Depends(get_competition_controller)
-):
-    """Process KIS Visual task"""
-    logger.info(f"KIS Visual request: query_clip='{request.query_clip_uri}'")
-    
-    try:
-        response = await controller.process_kis_visual(request)
-        logger.info(f"KIS Visual completed: {response.video_id} ({response.start_time}s-{response.end_time}s)")
-        return response
-    except Exception as e:
-        logger.error(f"KIS Visual error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"KIS Visual error: {str(e)}")
-
-
-@router.post(
-    "/kis/progressive",
-    response_model=KISResponse,
-    summary="Known-Item Search - Progressive",
-    description="""
-    Locate exact target segment with progressive hints.
-    
-    Starts with minimal description and accepts additional hints over time
-    to iteratively refine the search.
-    """,
-    response_description="Exact segment location with progressive match confidence"
-)
-async def kis_progressive(
-    request: KISProgressiveRequest,
-    additional_hints: Optional[List[str]] = None,
-    controller: CompetitionController = Depends(get_competition_controller)
-):
-    """Process KIS Progressive task"""
-    logger.info(f"KIS Progressive request: initial='{request.initial_hint}', hints={additional_hints}")
-    
-    try:
-        response = await controller.process_kis_progressive(request, additional_hints)
-        logger.info(f"KIS Progressive completed: {response.video_id} ({response.start_time}s-{response.end_time}s)")
-        return response
-    except Exception as e:
-        logger.error(f"KIS Progressive error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"KIS Progressive error: {str(e)}")
-
-
-@router.post(
-    "/dispatch",
-    summary="Universal Task Dispatcher",
-    description="""
-    Universal endpoint that dispatches to appropriate task handler based on task type.
-    
-    Accepts any valid competition task JSON and routes to the correct processor.
-    Task type is determined by the 'task' field in the input.
-    
-    **Supported Tasks:**
-    - vcMr_automatic: VCMR Automatic track
-    - video_qa: Video Question Answering
-    - kis_t: Known-Item Search Textual
-    - kis_v: Known-Item Search Visual  
-    - kis_c: Known-Item Search Progressive
-    """,
-    response_description="Task-specific response based on input task type"
-)
-async def dispatch_task(
-    task_input: Dict[str, Any],
-    controller: CompetitionController = Depends(get_competition_controller)
-):
-    """Universal task dispatcher for all competition tasks"""
-    task_type = task_input.get("task", "unknown")
-    logger.info(f"Task dispatch request: task='{task_type}'")
-    
-    try:
-        response = await controller.dispatch_task(task_input)
-        logger.info(f"Task dispatch completed: task='{task_type}'")
-        return response
-    except Exception as e:
-        logger.error(f"Task dispatch error: task='{task_type}', error={str(e)}")
-        raise HTTPException(status_code=500, detail=f"Task dispatch error: {str(e)}")
+    return recommendations

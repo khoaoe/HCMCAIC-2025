@@ -9,7 +9,7 @@ from llama_index.core import PromptTemplate
 class CompetitionPrompts:
     """Collection of optimized prompts for competition tasks"""
     
-    # Enhanced Visual Event Extraction for VCMR
+    # Visual Event Extraction for VCMR
     VCMR_VISUAL_EXTRACTION = PromptTemplate(
         """
         You are an expert video moment retrieval system. Extract and optimize the query for semantic video search.
@@ -162,7 +162,7 @@ class CompetitionPrompts:
         Additional Hints: {additional_hints}
         Search History: {search_history}
         
-        Combine all hints into an enhanced search strategy:
+        Combine all hints into an search strategy:
         
         1. Identify complementary information across hints
         2. Resolve any contradictions or conflicts
@@ -184,7 +184,7 @@ class CompetitionPrompts:
     # ASR-Visual Alignment
     ASR_VISUAL_ALIGNMENT = PromptTemplate(
         """
-        Align ASR text with visual content for enhanced moment understanding.
+        Align ASR text with visual content for moment understanding.
         
         Visual Content: {visual_description}
         ASR Text: {asr_text}
