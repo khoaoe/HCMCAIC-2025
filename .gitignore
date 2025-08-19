@@ -217,6 +217,7 @@ __marimo__/
 /resources
 
 # details
-repo_details.txt
 repo_details.json
+repo_details.txt
 descriptions.txt
+*.txt
