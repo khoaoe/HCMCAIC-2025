@@ -20,6 +20,7 @@ from core.settings import AppSettings
 from core.settings import MongoDBSettings, KeyFrameIndexMilvusSetting
 from factory.factory import ServiceFactory
 from models.keyframe import Keyframe
+from core.settings import AppSettings
 
 
 class CompetitionFactory:
@@ -460,10 +461,21 @@ def validate_competition_setup(
         "data_stats": {}
     }
     
-    # Check data folder
-    if not os.path.exists(data_folder):
+    # Check data folder (use provided path, not class attribute)
+    if not data_folder:
         validation_result["valid"] = False
-        validation_result["errors"].append(f"Data folder not found: {data_folder}")
+        validation_result["errors"].append("Data folder path is empty")
+        validation_result["data_stats"]["keyframe_count"] = 0
+    elif not os.path.isdir(data_folder):
+        # Auto-create missing data folder and warn instead of failing hard
+        try:
+            os.makedirs(data_folder, exist_ok=True)
+            validation_result["warnings"].append(f"Data folder did not exist and was created: {data_folder}")
+            validation_result["data_stats"]["keyframe_count"] = 0
+        except Exception as e:
+            validation_result["valid"] = False
+            validation_result["errors"].append(f"Failed to create data folder '{data_folder}': {e}")
+            validation_result["data_stats"]["keyframe_count"] = 0
     else:
         # Count keyframe files
         keyframe_count = 0

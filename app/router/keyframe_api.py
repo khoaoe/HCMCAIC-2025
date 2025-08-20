@@ -7,6 +7,8 @@ from schema.request import (
     TextSearchRequest,
     TextSearchWithExcludeGroupsRequest,
     TextSearchWithSelectedGroupsAndVideosRequest,
+    TextSearchWithTimeRangeRequest,
+    AdvancedTemporalSearchRequest,
 )
 from schema.response import KeyframeServiceReponse, SingleKeyframeDisplay, KeyframeDisplay
 from controller.query_controller import QueryController

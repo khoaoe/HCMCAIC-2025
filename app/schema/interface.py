@@ -14,6 +14,11 @@ class MilvusSearchRequest(BaseModel):
     embedding: List[float] = Field(..., description="Query embedding vector")
     top_k: int = Field(default=10, ge=1, le=1000, description="Number of top results to return")
     exclude_ids: Optional[List[int]] = Field(default=None, description="IDs to exclude from search results")
+    # Temporal search fields
+    start_time: Optional[float] = Field(default=None, description="Start time in seconds for temporal filtering")
+    end_time: Optional[float] = Field(default=None, description="End time in seconds for temporal filtering")
+    video_nums: Optional[List[int]] = Field(default=None, description="Video numbers to filter by")
+    group_nums: Optional[List[int]] = Field(default=None, description="Group numbers to filter by")
 
 
 class MilvusSearchResult(BaseModel):
@@ -21,6 +26,11 @@ class MilvusSearchResult(BaseModel):
     id_: int = Field(..., description="Primary key of the result")
     distance: float = Field(..., description="Distance/similarity score")
     embedding: Optional[List[float]] = Field(default=None, description="Original embedding vector")
+    # Temporal metadata fields
+    timestamp: Optional[float] = Field(default=None, description="Timestamp in seconds")
+    group_num: Optional[int] = Field(default=None, description="Group number")
+    video_num: Optional[int] = Field(default=None, description="Video number")
+    keyframe_num: Optional[int] = Field(default=None, description="Keyframe number")
 
 
 class MilvusSearchResponse(BaseModel):

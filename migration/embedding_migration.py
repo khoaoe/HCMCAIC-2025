@@ -4,6 +4,8 @@ from pymilvus import Collection, connections, FieldSchema, CollectionSchema, Dat
 from typing import Optional
 from tqdm import tqdm
 import argparse
+import json
+import os
 
 import sys
 import os
@@ -59,10 +61,15 @@ class MilvusEmbeddingInjector:
     def create_collection(self, embedding_dim: int, index_params: Optional[dict] = None):
         fields = [
             FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=False),
-            FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=embedding_dim)
+            FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=embedding_dim),
+            # Temporal search fields
+            FieldSchema(name="timestamp", dtype=DataType.DOUBLE, description="Timestamp in seconds"),
+            FieldSchema(name="group_num", dtype=DataType.INT32, description="Video group number"),
+            FieldSchema(name="video_num", dtype=DataType.INT32, description="Video number within group"),
+            FieldSchema(name="keyframe_num", dtype=DataType.INT32, description="Keyframe number within video")
         ]
         
-        schema = CollectionSchema(fields, f"Collection for {self.collection_name} embeddings")
+        schema = CollectionSchema(fields, f"Collection for {self.collection_name} embeddings with temporal support")
         
         collection = Collection(self.collection_name, schema, using=self.alias)
         print(f"Created collection '{self.collection_name}' with dimension {embedding_dim}")
@@ -76,12 +83,20 @@ class MilvusEmbeddingInjector:
         collection.create_index("embedding", index_params)
         print("Created index for embedding field")
         
+        # Create indexes on temporal fields for efficient filtering
+        collection.create_index("timestamp", {"index_type": "STL_SORT"})
+        collection.create_index("group_num", {"index_type": "STL_SORT"})
+        collection.create_index("video_num", {"index_type": "STL_SORT"})
+        print("Created indexes for temporal fields")
+        
         return collection
     
     def inject_embeddings(
         self, 
         embedding_file_path: str, 
         batch_size: int = 10000,
+        id2index_path: Optional[str] = None,
+        default_fps: float = 25.0
     ):
         print(f"Loading embeddings from {embedding_file_path}")
         embeddings = torch.load(embedding_file_path, weights_only=False, map_location="cpu")
@@ -94,6 +109,15 @@ class MilvusEmbeddingInjector:
         
         num_vectors, embedding_dim = embeddings.shape
         print(f"Loaded {num_vectors} embeddings with dimension {embedding_dim}")
+        
+        # Load id2index mapping for temporal metadata
+        id2index = {}
+        if id2index_path and os.path.exists(id2index_path):
+            with open(id2index_path, 'r') as f:
+                id2index = json.load(f)
+            print(f"Loaded id2index mapping with {len(id2index)} entries")
+        else:
+            print("Warning: No id2index mapping provided, using default temporal values")
         
     
         
@@ -112,7 +136,45 @@ class MilvusEmbeddingInjector:
             batch_embeddings = embeddings[i:end_idx].tolist()
 
             batch_ids = list(range(i, end_idx))
-            entities = [batch_ids, batch_embeddings]
+            
+            # Prepare temporal metadata for each batch item
+            batch_timestamps = []
+            batch_group_nums = []
+            batch_video_nums = []
+            batch_keyframe_nums = []
+            
+            for idx in range(i, end_idx):
+                idx_str = str(idx)
+                if idx_str in id2index:
+                    # Parse "group/video/keyframe" format
+                    parts = id2index[idx_str].split('/')
+                    if len(parts) >= 3:
+                        group_num = int(parts[0])
+                        video_num = int(parts[1])
+                        keyframe_num = int(parts[2])
+                        timestamp = keyframe_num / default_fps  # Convert to seconds
+                    else:
+                        # Fallback values
+                        group_num, video_num, keyframe_num = 1, 1, idx
+                        timestamp = idx / default_fps
+                else:
+                    # Default values when mapping not available
+                    group_num, video_num, keyframe_num = 1, 1, idx
+                    timestamp = idx / default_fps
+                
+                batch_timestamps.append(timestamp)
+                batch_group_nums.append(group_num)
+                batch_video_nums.append(video_num)
+                batch_keyframe_nums.append(keyframe_num)
+            
+            entities = [
+                batch_ids, 
+                batch_embeddings, 
+                batch_timestamps,
+                batch_group_nums,
+                batch_video_nums,
+                batch_keyframe_nums
+            ]
             collection.insert(entities)
         
         collection.flush()
@@ -139,7 +201,8 @@ class MilvusEmbeddingInjector:
 
 def inject_embeddings_simple(
     embedding_file_path: str,
-    setting: KeyFrameIndexMilvusSetting
+    setting: KeyFrameIndexMilvusSetting,
+    id2index_path: Optional[str] = None
 ):
     injector = MilvusEmbeddingInjector(
         setting=setting,
@@ -151,7 +214,8 @@ def inject_embeddings_simple(
 
     injector.inject_embeddings(
         embedding_file_path=embedding_file_path,
-        batch_size=setting.BATCH_SIZE
+        batch_size=setting.BATCH_SIZE,
+        id2index_path=id2index_path
     )
     count = injector.get_collection_info()
     print(f"Successfully injected embeddings! Total entities: {count}")
@@ -160,14 +224,19 @@ def inject_embeddings_simple(
 
 if __name__ == "__main__":
     
-    parser = argparse.ArgumentParser(description="Migrate embedding to Milvus.")
+    parser = argparse.ArgumentParser(description="Migrate embedding to Milvus with temporal support.")
     parser.add_argument(
-        "--file_path", type=str, help="Path to embedding pt."
+        "--file_path", type=str, help="Path to embedding pt file."
+    )
+    parser.add_argument(
+        "--id2index_path", type=str, default=None, 
+        help="Path to id2index.json file for temporal metadata (optional)."
     )
     args = parser.parse_args()
 
     setting =  KeyFrameIndexMilvusSetting()
     inject_embeddings_simple(
         embedding_file_path=args.file_path,
-        setting=setting
+        setting=setting,
+        id2index_path=args.id2index_path
     )

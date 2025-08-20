@@ -60,8 +60,43 @@ docker compose up -d
 
 4. Data Migration 
 ```bash
-python migration/embedding_migration.py --file_path <emnedding.pt file>
+# Migrate embeddings with temporal support
+python migration/embedding_migration.py --file_path <embedding.pt file> --id2index_path <id2index.json file path>
 python migration/keyframe_migration.py --file_path <id2index.json file path>
+```
+
+### 🕐 Temporal Search Features
+
+The system now includes advanced temporal search capabilities:
+
+#### Temporal Search Endpoints
+- `/api/v1/temporal/search/time-range` - Search within specific time ranges
+- `/api/v1/temporal/search/video-time-window` - Search within video time windows  
+- `/api/v1/temporal/search/temporal-stats` - Get temporal search statistics
+
+#### Key Features
+- **Native timestamp filtering** using Milvus scalar fields
+- **Video-specific time windows** for precise moment retrieval
+- **Cross-corpus temporal search** across multiple videos
+- **Efficient temporal indexing** for fast time-based queries
+- **Combined semantic and temporal relevance** scoring
+
+#### Example Usage
+```bash
+# Search for "person walking" between 30-90 seconds in video L01/V001
+curl -X POST "http://localhost:8000/api/v1/temporal/search/time-range" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "person walking",
+    "start_time": 30.0,
+    "end_time": 90.0,
+    "video_id": "L01/V001",
+    "top_k": 10,
+    "score_threshold": 0.3
+  }'
+
+# Search within a specific time window using GET
+curl "http://localhost:8000/api/v1/temporal/search/video-time-window?query=sunset&video_id=L02/V003&start_time=120.5&end_time=185.2"
 ```
 
 5. Set API keys/tokens

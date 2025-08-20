@@ -3,6 +3,14 @@ import requests
 import base64
 from PIL import Image
 import io
+import os
+import sys
+
+# Add app to path to import settings
+ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../'))
+sys.path.insert(0, ROOT_DIR)
+
+from app.core.settings import AppSettings
 
 # Page configuration
 st.set_page_config(
@@ -83,6 +91,13 @@ if 'search_results' not in st.session_state:
 if 'api_base_url' not in st.session_state:
     st.session_state.api_base_url = "http://localhost:8000"
 
+# Load app settings
+@st.cache_resource
+def get_app_settings():
+    return AppSettings()
+
+app_settings = get_app_settings()
+
 # Define fullscreen image dialog
 @st.dialog("Fullscreen Image Viewer", width="large")
 def show_fullscreen_image(image_path, caption):
@@ -136,7 +151,7 @@ with col2:
     st.markdown("### 🎛️ Search Mode")
     search_mode = st.selectbox(
         "Mode",
-        options=["Default", "Exclude Groups", "Include Groups & Videos"],
+        options=["Default", "Exclude Groups", "Include Groups & Videos", "Temporal Search", "Video Time Window", "GRAB Search"],
         help="Choose how to filter your search results"
     )
 
@@ -191,6 +206,142 @@ elif search_mode == "Include Groups & Videos":
         except ValueError:
             st.error("Please enter valid video IDs separated by commas")
 
+elif search_mode == "Temporal Search":
+    st.markdown("### ⏰ Temporal Search")
+    
+    col_temp1, col_temp2 = st.columns(2)
+    with col_temp1:
+        start_time = st.number_input(
+            "Start Time (seconds)",
+            min_value=0.0,
+            value=0.0,
+            step=0.1,
+            help="Start time for temporal filtering"
+        )
+    
+    with col_temp2:
+        end_time = st.number_input(
+            "End Time (seconds)",
+            min_value=0.1,
+            value=60.0,
+            step=0.1,
+            help="End time for temporal filtering"
+        )
+    
+    video_id_temporal = st.text_input(
+        "Video ID (optional)",
+        placeholder="L01/V001",
+        help="Restrict search to specific video (format: Lxx/Vxxx)"
+    )
+    
+    if end_time <= start_time:
+        st.error("End time must be greater than start time")
+
+elif search_mode == "Video Time Window":
+    st.markdown("### 🎬 Video Time Window")
+    
+    video_id_window = st.text_input(
+        "Video ID (required)",
+        placeholder="L01/V001",
+        help="Video to search within (format: Lxx/Vxxx)"
+    )
+    
+    col_window1, col_window2 = st.columns(2)
+    with col_window1:
+        window_start_time = st.number_input(
+            "Start Time (seconds)",
+            min_value=0.0,
+            value=0.0,
+            step=0.1,
+            help="Window start time"
+        )
+    
+    with col_window2:
+        window_end_time = st.number_input(
+            "End Time (seconds)",
+            min_value=0.1,
+            value=30.0,
+            step=0.1,
+            help="Window end time"
+        )
+    
+    if not video_id_window.strip():
+        st.error("Video ID is required for video time window search")
+    
+    if window_end_time <= window_start_time:
+        st.error("End time must be greater than start time")
+
+elif search_mode == "GRAB Search":
+    st.markdown("### 🚀 GRAB Framework Search")
+    st.markdown("**GRAB**: Global Re-ranking and Adaptive Bidirectional search")
+    
+    col_grab1, col_grab2 = st.columns(2)
+    with col_grab1:
+        grab_start_time = st.number_input(
+            "Start Time (seconds)",
+            min_value=0.0,
+            value=0.0,
+            step=0.1,
+            help="Start time for GRAB temporal search"
+        )
+        
+        grab_video_id = st.text_input(
+            "Video ID (optional)",
+            placeholder="L01/V001",
+            help="Target video for GRAB search (format: Lxx/Vxxx)"
+        )
+    
+    with col_grab2:
+        grab_end_time = st.number_input(
+            "End Time (seconds)",
+            min_value=0.1,
+            value=60.0,
+            step=0.1,
+            help="End time for GRAB temporal search"
+        )
+        
+        grab_optimization = st.selectbox(
+            "Optimization Mode",
+            options=["fast", "balanced", "precision"],
+            index=1,  # Default to balanced
+            help="GRAB optimization level: fast (speed), balanced (default), precision (accuracy)"
+        )
+    
+    # GRAB Framework Features
+    st.markdown("#### 🔧 GRAB Features")
+    grab_features_info = {
+        "fast": "Basic temporal search (λs=0.8, λt=0.2, 1s window)",
+        "balanced": "Full GRAB pipeline (λs=0.7, λt=0.3, 2s window)",
+        "precision": "Maximum accuracy (λs=0.6, λt=0.4, 3s window)"
+    }
+    
+    st.info(f"**{grab_optimization.title()} Mode**: {grab_features_info[grab_optimization]}")
+    
+    col_features1, col_features2 = st.columns(2)
+    with col_features1:
+        st.markdown("**Enabled Features:**")
+        if grab_optimization != "fast":
+            st.markdown("- ✅ Shot Detection & Sampling")
+            st.markdown("- ✅ Perceptual Hash Deduplication") 
+            st.markdown("- ✅ SuperGlobal Reranking")
+        if grab_optimization == "precision":
+            st.markdown("- ✅ ABTS Boundary Detection")
+            st.markdown("- ✅ Temporal Stability Analysis")
+    
+    with col_features2:
+        st.markdown("**Performance:**")
+        performance_info = {
+            "fast": "⚡ Fastest (~1-2s)",
+            "balanced": "⚖️ Balanced (~3-5s)", 
+            "precision": "🎯 Highest Accuracy (~5-8s)"
+        }
+        st.markdown(f"- {performance_info[grab_optimization]}")
+        st.markdown("- 📊 Detailed Analysis")
+        st.markdown("- 🔄 Comparison Mode")
+    
+    if grab_end_time <= grab_start_time:
+        st.error("End time must be greater than start time")
+
 # Search button and logic
 if st.button("🚀 Search", use_container_width=True):
     if not query.strip():
@@ -217,7 +368,128 @@ if st.button("🚀 Search", use_container_width=True):
                         "exclude_groups": exclude_groups
                     }
                 
-                else:  # Include Groups & Videos
+                elif search_mode == "Temporal Search":
+                    endpoint = f"{st.session_state.api_base_url}/api/v1/temporal/search/time-range"
+                    payload = {
+                        "query": query,
+                        "top_k": top_k,
+                        "score_threshold": score_threshold,
+                        "start_time": start_time,
+                        "end_time": end_time,
+                        "video_id": video_id_temporal if video_id_temporal.strip() else None
+                    }
+                
+                elif search_mode == "Video Time Window":
+                    if not video_id_window.strip():
+                        st.error("Video ID is required for video time window search")
+                        st.stop()
+                    
+                    endpoint = f"{st.session_state.api_base_url}/api/v1/temporal/search/video-time-window"
+                    # Use GET parameters for this endpoint
+                    params = {
+                        "query": query,
+                        "video_id": video_id_window,
+                        "start_time": window_start_time,
+                        "end_time": window_end_time,
+                        "top_k": top_k,
+                        "score_threshold": score_threshold
+                    }
+                    
+                    # For GET request, we'll use requests.get instead
+                    response = requests.get(endpoint, params=params, timeout=30)
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        results = data.get("results", [])
+                        # Normalize Windows-style paths
+                        for item in results:
+                            if isinstance(item, dict) and 'path' in item and isinstance(item['path'], str):
+                                item['path'] = item['path'].replace('\\', '/')
+                        st.session_state.search_results = results
+                        st.success(f"✅ Found {len(st.session_state.search_results)} results in video {video_id_window} time window!")
+                    else:
+                        st.error(f"❌ API Error: {response.status_code} - {response.text}")
+                    
+                    # Skip the normal POST request processing for this mode
+                    st.stop()
+                
+                elif search_mode == "GRAB Search":
+                    endpoint = f"{st.session_state.api_base_url}/api/v1/temporal/search/enhanced-moments"
+                    # Use GET parameters for GRAB search
+                    params = {
+                        "query": query,
+                        "start_time": grab_start_time if grab_start_time > 0 else None,
+                        "end_time": grab_end_time if grab_end_time > grab_start_time else None,
+                        "video_id": grab_video_id if grab_video_id.strip() else None,
+                        "top_k": top_k,
+                        "score_threshold": score_threshold,
+                        "optimization_level": grab_optimization
+                    }
+                    
+                    # Remove None values
+                    params = {k: v for k, v in params.items() if v is not None}
+                    
+                    # For GRAB search, we'll use requests.post with JSON for detailed response
+                    response = requests.post(endpoint, params=params, timeout=60)  # Longer timeout for GRAB
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        moments = data.get("moments", [])
+                        
+                        # Convert moments to results format for display
+                        results = []
+                        for moment in moments:
+                            # Extract video info from video_id
+                            group_num = int(moment["video_id"].split('/')[0][1:])
+                            video_num = int(moment["video_id"].split('/')[1][1:])
+                            
+                            # Use first evidence keyframe for path, fallback to keyframe_range
+                            evidence_keyframes = moment.get("evidence_keyframes", [])
+                            if evidence_keyframes:
+                                kf_num = evidence_keyframes[0]
+                            else:
+                                # Fallback: use keyframe_start from keyframe_range
+                                keyframe_range = moment.get("keyframe_range", {})
+                                kf_num = keyframe_range.get("start", 0)  # Use 0 as fallback
+                            
+                            path = (
+                                f"{app_settings.KEYFRAMES_PATH}/"
+                                f"L{group_num:02d}/V{video_num:03d}/{kf_num:08d}.webp"
+                            )
+                            
+                            results.append({
+                                "path": path,
+                                "score": moment["confidence_score"],
+                                "moment_info": {
+                                    "start_time": moment["start_time"],
+                                    "end_time": moment["end_time"],
+                                    "duration": moment["duration"]
+                                }
+                            })
+                        
+                        st.session_state.search_results = results
+                        st.success(f"🚀 GRAB Framework found {len(results)} temporal moments!")
+                        
+                        # Show GRAB-specific metrics
+                        if data.get("optimization_level"):
+                            st.info(f"**Optimization**: {data['optimization_level'].title()} mode applied")
+
+                        payload = {
+                            "query": query,
+                            "top_k": top_k,
+                            "score_threshold": score_threshold,
+                            "optimization_level": grab_optimization,
+                            
+                        }
+                        
+                    else:
+                        st.error(f"❌ GRAB Search Error: {response.status_code} - {response.text}")
+                    
+                    # Skip the normal POST request processing for GRAB search
+                    st.stop()
+                
+                # Include Groups & Videos
+                elif search_mode == "Include Groups & Videos":
                     endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe/search/selected-groups-videos"
                     payload = {
                         "query": query,
@@ -227,7 +499,8 @@ if st.button("🚀 Search", use_container_width=True):
                         "include_videos": include_videos
                     }
                 
-
+                
+                # POST request
                 response = requests.post(
                     endpoint,
                     json=payload,
@@ -314,18 +587,53 @@ if st.session_state.search_results:
                     """, unsafe_allow_html=True)
             
             with col_info:
-                st.markdown(f"""
-                <div class="result-card">
-                    <div style="display: flex; justify-content: between; align-items: center; margin-bottom: 0.5rem;">
-                        <h4 style="margin: 0; color: #333;">Result #{i+1}</h4>
-                        <span class="score-badge">Score: {result['score']:.3f}</span>
+                # display for GRAB framework results
+                moment_info = result.get('moment_info', {})
+                
+                if moment_info:
+                    # GRAB framework result with temporal moment info
+                    st.markdown(f"""
+                    <div class="result-card">
+                        <div style="display: flex; justify-content: between; align-items: center; margin-bottom: 0.5rem;">
+                            <h4 style="margin: 0; color: #333;">🎯 Temporal Moment #{i+1}</h4>
+                            <span class="score-badge">Score: {result['score']:.3f}</span>
+                        </div>
+                        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 0.75rem; border-radius: 8px; margin: 0.5rem 0;">
+                            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; text-align: center;">
+                                <div>
+                                    <div style="font-size: 0.8rem; opacity: 0.8;">Start Time</div>
+                                    <div style="font-weight: bold;">{moment_info['start_time']:.1f}s</div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 0.8rem; opacity: 0.8;">Duration</div>
+                                    <div style="font-weight: bold;">{moment_info['duration']:.1f}s</div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 0.8rem; opacity: 0.8;">End Time</div>
+                                    <div style="font-weight: bold;">{moment_info['end_time']:.1f}s</div>
+                                </div>
+                            </div>
+                        </div>
+                        <p style="margin: 0.5rem 0; color: #666;"><strong>Representative Frame:</strong> {result['path']}</p>
+                        <div style="background: #f8f9fa; padding: 0.5rem; border-radius: 5px; font-family: monospace; font-size: 0.8rem;">
+                            {result['path']}
+                        </div>
                     </div>
-                    <p style="margin: 0.5rem 0; color: #666;"><strong>Path:</strong> {result['path']}</p>
-                    <div style="background: #f8f9fa; padding: 0.5rem; border-radius: 5px; font-family: monospace; font-size: 0.9rem;">
-                        {result['path']}
+                    """, unsafe_allow_html=True)
+                else:
+                    # Traditional keyframe result
+                    st.markdown(f"""
+                    <div class="result-card">
+                        <div style="display: flex; justify-content: between; align-items: center; margin-bottom: 0.5rem;">
+                            <h4 style="margin: 0; color: #333;">Result #{i+1}</h4>
+                            <span class="score-badge">Score: {result['score']:.3f}</span>
+                        </div>
+                        <p style="margin: 0.5rem 0; color: #666;"><strong>Path:</strong> {result['path']}</p>
+                        <div style="background: #f8f9fa; padding: 0.5rem; border-radius: 5px; font-family: monospace; font-size: 0.9rem;">
+                            {result['path']}
+                        </div>
                     </div>
-                </div>
-                """, unsafe_allow_html=True)
+                    """, unsafe_allow_html=True)
         
         st.markdown("<br>", unsafe_allow_html=True)
 

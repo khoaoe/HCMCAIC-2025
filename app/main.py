@@ -7,7 +7,7 @@ import os
 sys.path.insert(0, os.path.dirname(__file__))
 
 
-from router import keyframe_api, agent_api
+from router import keyframe_api, agent_api, temporal_search_api
 from core.lifespan import lifespan
 from core.logger import SimpleLogger
 
@@ -72,6 +72,7 @@ app.add_middleware(
 
 app.include_router(keyframe_api.router, prefix="/api/v1")
 app.include_router(agent_api.router, prefix='/api/v1')
+app.include_router(temporal_search_api.router, prefix="/api/v1")
 
 @app.get("/", tags=["root"])
 async def root():
@@ -128,10 +129,24 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
     
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,  
-        log_level="info"
-    )
+    try:
+        uvicorn.run(
+            "main:app",
+            host="0.0.0.0",
+            port=8000,
+            reload=True,  
+            log_level="info"
+        )
+    except ValueError as e:
+        if "signal only works in main thread" in str(e):
+            # Fallback for Windows/threading issues - run without reload
+            print("Warning: Running without reload due to threading limitations")
+            uvicorn.run(
+                app,  # Use app object directly instead of string reference
+                host="0.0.0.0",
+                port=8000,
+                reload=False,  
+                log_level="info"
+            )
+        else:
+            raise

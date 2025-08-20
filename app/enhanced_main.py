@@ -8,20 +8,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from core.dependencies import get_app_settings
-from core.settings import AppSettings, MongoDBSettings, KeyFrameIndexMilvusSetting  
+from core.settings import MongoDBSettings, KeyFrameIndexMilvusSetting, REPO_ROOT
 from models.keyframe import Keyframe
 from factory.factory import ServiceFactory
 from motor.motor_asyncio import AsyncIOMotorClient
 from beanie import init_beanie
-from router import keyframe_api, agent_api
+from router import keyframe_api, agent_api, temporal_search_api
 from factory.competition_factory import (
     CompetitionFactory,
     validate_competition_setup
 )
 
-
 # Global application state
 app_state: Dict[str, Any] = {}
+
 
 
 @asynccontextmanager
@@ -64,7 +64,8 @@ async def lifespan(app: FastAPI):
             print("❌ Competition setup validation failed:")
             for error in validation_result["errors"]:
                 print(f"   - {error}")
-            raise RuntimeError("Invalid competition setup")
+            # Downgrade to warning so the app can still start; routes may return warnings
+            print("⚠️  Continuing startup with limited functionality. Please fix the setup above.")
         
         if validation_result["warnings"]:
             print("⚠️  Setup warnings:")
@@ -84,7 +85,7 @@ async def lifespan(app: FastAPI):
         factory = CompetitionFactory(settings)
         
         competition_system = factory.create_full_competition_system(
-            data_folder=getattr(settings, 'DATA_FOLDER', '/data/keyframes'),
+            data_folder=getattr(settings, 'DATA_FOLDER', str(REPO_ROOT / 'resources' / 'keyframes')),
             video_metadata_path=getattr(settings, 'VIDEO_METADATA_FILE', None),
             objects_file_path=getattr(settings, 'OBJECTS_FILE', '/data/objects.json'),
             asr_file_path=getattr(settings, 'ASR_FILE', '/data/asr.json'),
@@ -122,6 +123,7 @@ async def lifespan(app: FastAPI):
         # Backward-compatible routes for existing clients (e.g., /api/v1/keyframe/*)
         app.include_router(keyframe_api.router, prefix="/api/v1")
         app.include_router(agent_api.router, prefix='/api/v1')
+        app.include_router(temporal_search_api.router, prefix="/api/v1")
         
         print("✅ Competition system initialized successfully!")
         print(f"   - Available tasks: {len(competition_system['config']['available_tasks'])}")
