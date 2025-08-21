@@ -20,6 +20,20 @@ from schema.response import KeyframeServiceReponse
 from schema.competition import MomentCandidate
 
 
+def safe_convert_video_num(video_num) -> int:
+    """Safely convert video_num to int, handling cases where it might be '26_V288' format"""
+    if isinstance(video_num, str):
+        # Handle cases where video_num might be '26_V288' format
+        if '_V' in video_num:
+            # Extract just the video number part
+            video_part = video_num.split('_V')[-1]
+            return int(video_part)
+        else:
+            return int(video_num)
+    else:
+        return int(video_num)
+
+
 class QueryUnderstandingModule:
     """Advanced query understanding with entity extraction and temporal parsing"""
     
@@ -229,7 +243,7 @@ class MultiModalRetriever:
             # Add object detection context
             objects = []
             for keyframe_num in moment.evidence_keyframes:
-                keyframe_key = f"L{moment.group_num:02d}/V{moment.video_num:03d}/{keyframe_num:08d}.webp"
+                keyframe_key = f"L{str(moment.group_num):0>2s}/L{str(moment.group_num):0>2s}_V{str(safe_convert_video_num(moment.video_num)):0>3s}/{int(keyframe_num):0>3d}.jpg"
                 kf_objects = self.objects_data.get(keyframe_key, [])
                 objects.extend(kf_objects)
             
@@ -358,7 +372,7 @@ class AdvancedMultiModalAgent:
         video_parts = video_id.split('/')
         if len(video_parts) >= 2:
             group_num = int(video_parts[0][1:]) if video_parts[0].startswith('L') else int(video_parts[0])
-            video_num = int(video_parts[1][1:]) if video_parts[1].startswith('V') else int(video_parts[1])
+            video_num = safe_convert_video_num(video_parts[1][1:]) if video_parts[1].startswith('V') else safe_convert_video_num(video_parts[1])
         else:
             raise ValueError(f"Invalid video_id format: {video_id}")
         
@@ -419,7 +433,7 @@ class AdvancedMultiModalAgent:
             for keyframe_num in moment.evidence_keyframes[:2]:  # Max 2 keyframes per moment
                 image_path = os.path.join(
                     self.data_folder,
-                    f"L{moment.group_num:02d}/V{moment.video_num:03d}/{keyframe_num:08d}.webp"
+                    f"L{str(moment.group_num):0>2s}/L{str(moment.group_num):0>2s}_V{str(safe_convert_video_num(moment.video_num)):0>3s}/{int(keyframe_num):0>3d}.jpg"
                 )
                 
                 if os.path.exists(image_path):
@@ -545,7 +559,7 @@ class AdvancedMultiModalAgent:
             refined_query = str(response).strip()
             
             # Search with refined query
-            return await self.retrieve_and_rank(
+            return await self.multimodal_retriever.retrieve_and_rank(
                 query=refined_query,
                 top_k=10,
                 enable_reranking=True

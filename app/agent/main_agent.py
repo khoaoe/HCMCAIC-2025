@@ -17,6 +17,18 @@ from service.model_service import ModelService
 from schema.response import KeyframeServiceReponse
 
 
+def safe_convert_video_num(video_num) -> int:
+    """Safely convert video_num to int, handling cases where it might be '26_V288' format"""
+    if isinstance(video_num, str):
+        # Handle cases where video_num might be '26_V288' format
+        if '_V' in video_num:
+            # Extract just the video number part
+            video_part = video_num.split('_V')[-1]
+            return int(video_part)
+        else:
+            return int(video_num)
+    else:
+        return int(video_num)
 
 
 def apply_object_filter(
@@ -32,7 +44,7 @@ def apply_object_filter(
         filtered_keyframes = []
 
         for kf in keyframes:
-            keyy = f"L{kf.group_num:02d}/V{kf.video_num:03d}/{kf.keyframe_num:08d}.webp"
+            keyy = f"L{str(kf.group_num):0>2s}/L{str(kf.group_num):0>2s}_V{str(safe_convert_video_num(kf.video_num)):0>3s}/{str(kf.keyframe_num):0>3d}.jpg"
             keyframe_objects = objects_data.get(keyy, [])
             print(f"{keyy=}")
             print(f"{keyframe_objects=}")
@@ -127,11 +139,11 @@ class KeyframeSearchAgent:
 
         print(f"{group_num}")
         print(f"{video_num}")
-        print(f"L{group_num:02d}/V{video_num:03d}")
+        print(f"L{str(group_num):0>2s}/L{str(group_num):0>2s}_V{str(video_num):0>3s}")
         # Extract ASR text for the temporal segment
         matching_asr = None
         for entry in self.asr_data.values():
-            if isinstance(entry, dict) and entry.get("file_path") == f"L{group_num:02d}/V{video_num:03d}":
+            if isinstance(entry, dict) and entry.get("file_path") == f"L{str(group_num):0>2s}/L{str(group_num):0>2s}_V{str(video_num):0>3s}":
                 matching_asr = entry
                 break
         

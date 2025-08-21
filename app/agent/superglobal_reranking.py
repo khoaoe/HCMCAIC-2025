@@ -7,9 +7,24 @@ import numpy as np
 from typing import List, Dict, Tuple, Optional
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+import os
 
 from schema.response import KeyframeServiceReponse
 from service.model_service import ModelService
+
+
+def safe_convert_video_num(video_num) -> int:
+    """Safely convert video_num to int, handling cases where it might be '26_V288' format"""
+    if isinstance(video_num, str):
+        # Handle cases where video_num might be '26_V288' format
+        if '_V' in video_num:
+            # Extract just the video number part
+            video_part = video_num.split('_V')[-1]
+            return int(video_part)
+        else:
+            return int(video_num)
+    else:
+        return int(video_num)
 
 
 class GeMPooling:
@@ -185,7 +200,7 @@ class SuperGlobalReranker:
         for i, kf in enumerate(keyframes):
             kf_copy = KeyframeServiceReponse(
                 key=kf.key,
-                video_num=kf.video_num,
+                video_num=safe_convert_video_num(kf.video_num),
                 group_num=kf.group_num,
                 keyframe_num=kf.keyframe_num,
                 confidence_score=final_scores[i]
@@ -220,7 +235,7 @@ class SuperGlobalReranker:
                 # Compute embedding from image
                 image_path = os.path.join(
                     data_folder,
-                    f"L{kf.group_num:02d}/V{kf.video_num:03d}/{kf.keyframe_num:08d}.webp"
+                    f"L{str(kf.group_num):0>2s}/L{str(kf.group_num):0>2s}_V{str(safe_convert_video_num(kf.video_num)):0>3s}/{str(kf.keyframe_num):0>3d}.jpg"
                 )
                 
                 if os.path.exists(image_path):

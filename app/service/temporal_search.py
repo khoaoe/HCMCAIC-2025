@@ -20,6 +20,20 @@ from service.model_service import ModelService
 from agent.temporal_localization import TemporalLocalizer
 
 
+def safe_convert_video_num(video_num) -> int:
+    """Safely convert video_num to int, handling cases where it might be '26_V288' format"""
+    if isinstance(video_num, str):
+        # Handle cases where video_num might be '26_V288' format
+        if '_V' in video_num:
+            # Extract just the video number part
+            video_part = video_num.split('_V')[-1]
+            return int(video_part)
+        else:
+            return int(video_num)
+    else:
+        return int(video_num)
+
+
 class TemporalSearchService:
     """
     Advanced temporal search service implementing GRAB framework optimizations
@@ -65,9 +79,24 @@ class TemporalSearchService:
         try:
             # Try using native temporal search with scalar fields
             if video_id:
-                # Parse video_id
-                parts = video_id.replace('L', '').replace('V', '').split('/')
-                group_num, video_num = int(parts[0]), int(parts[1])
+                # Parse video_id to extract group_num and video_num
+                parts = video_id.split('/')
+                if len(parts) >= 2:
+                    group_part = parts[0].replace('L', '')
+                    video_part = parts[1]
+                    
+                    # Handle different video part formats
+                    if video_part.startswith('V'):
+                        # Format: "V001" -> extract "001"
+                        video_num = int(video_part[1:])
+                    elif '_V' in video_part:
+                        # Format: "L20_V001" -> extract "001"
+                        video_num = int(video_part.split('_V')[-1])
+                    else:
+                        # Assume it's already a number
+                        video_num = int(video_part)
+                    
+                    group_num = int(group_part)
                 
                 initial_keyframes = await self.keyframe_service.search_by_text_temporal(
                     text_embedding=embedding,
@@ -114,8 +143,24 @@ class TemporalSearchService:
                     
                     # Post-filter by video_id if specified
                     if video_id and initial_keyframes:
-                        parts = video_id.replace('L', '').replace('V', '').split('/')
-                        target_group_num, target_video_num = int(parts[0]), int(parts[1])
+                        # Parse video_id to extract group_num and video_num
+                        parts = video_id.split('/')
+                        if len(parts) >= 2:
+                            group_part = parts[0].replace('L', '')
+                            video_part = parts[1]
+                            
+                            # Handle different video part formats
+                            if video_part.startswith('V'):
+                                # Format: "V001" -> extract "001"
+                                target_video_num = int(video_part[1:])
+                            elif '_V' in video_part:
+                                # Format: "L20_V001" -> extract "001"
+                                target_video_num = int(video_part.split('_V')[-1])
+                            else:
+                                # Assume it's already a number
+                                target_video_num = int(video_part)
+                            
+                            target_group_num = int(group_part)
                         
                         filtered_keyframes = []
                         for kf in initial_keyframes:
@@ -140,8 +185,12 @@ class TemporalSearchService:
                 
                 # Post-filter by video_id if specified
                 if video_id and initial_keyframes:
-                    parts = video_id.replace('L', '').replace('V', '').split('/')
-                    target_group_num, target_video_num = int(parts[0]), int(parts[1])
+                    # Parse video_id to extract group_num and video_num
+                    parts = video_id.split('/')
+                    if len(parts) >= 2:
+                        group_part = parts[0].replace('L', '')
+                        video_part = parts[1].split('_V')[-1]  # Extract just the video number
+                        target_group_num, target_video_num = int(group_part), int(video_part)
                     
                     filtered_keyframes = []
                     for kf in initial_keyframes:
@@ -281,10 +330,10 @@ class TemporalSearchService:
             enhanced_score = kf.confidence_score * 1.1  # Slight boost for reranked items
             
             enhanced_kf = KeyframeServiceReponse(
-                key=kf.key,
-                video_num=kf.video_num,
-                group_num=kf.group_num,
-                keyframe_num=kf.keyframe_num,
+                key=int(kf.key),
+                video_num=safe_convert_video_num(kf.video_num),
+                group_num=int(kf.group_num),
+                keyframe_num=int(kf.keyframe_num),
                 confidence_score=min(1.0, enhanced_score)  # Clamp to max 1.0
             )
             enhanced_keyframes.append(enhanced_kf)
@@ -333,7 +382,7 @@ class TemporalSearchService:
             enhanced_moment = MomentCandidate(
                 video_id=moment.video_id,
                 group_num=moment.group_num,
-                video_num=moment.video_num,
+                video_num=safe_convert_video_num(moment.video_num),
                 keyframe_start=moment.keyframe_start,
                 keyframe_end=moment.keyframe_end,
                 start_time=moment.start_time,

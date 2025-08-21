@@ -14,6 +14,21 @@ from repository.mongo import KeyframeRepository
 
 from schema.response import KeyframeServiceReponse
 
+
+def safe_convert_video_num(video_num) -> int:
+    """Safely convert video_num to int, handling cases where it might be '26_V288' format"""
+    if isinstance(video_num, str):
+        # Handle cases where video_num might be '26_V288' format
+        if '_V' in video_num:
+            # Extract just the video number part
+            video_part = video_num.split('_V')[-1]
+            return int(video_part)
+        else:
+            return int(video_num)
+    else:
+        return int(video_num)
+
+
 class KeyframeQueryService:
     def __init__(
             self, 
@@ -74,13 +89,17 @@ class KeyframeQueryService:
         for result in sorted_results:
             keyframe = keyframe_map.get(result.id_) 
             if keyframe is not None:
+                # Debug: Check if video_num is corrupted
+                if isinstance(keyframe.video_num, str) and '_V' in keyframe.video_num:
+                    print(f"WARNING: Corrupted video_num detected: {keyframe.video_num} for keyframe {keyframe.key}")
+                
                 response.append(
                     KeyframeServiceReponse(
-                        key=keyframe.key,
-                        video_num=keyframe.video_num,
-                        group_num=keyframe.group_num,
-                        keyframe_num=keyframe.keyframe_num,
-                        confidence_score=result.distance
+                        key=int(keyframe.key),
+                        video_num=safe_convert_video_num(keyframe.video_num),
+                        group_num=int(keyframe.group_num),
+                        keyframe_num=int(keyframe.keyframe_num),
+                        confidence_score=float(result.distance)
                     )
                 )
         return response
@@ -183,10 +202,14 @@ class KeyframeQueryService:
             # Prefer authoritative metadata from Mongo (backfill)
             kf = keyframe_map.get(result.id_)
             if kf is not None:
+                # Debug: Check if video_num is corrupted
+                if isinstance(kf.video_num, str) and '_V' in kf.video_num:
+                    print(f"WARNING: Corrupted video_num detected in temporal search: {kf.video_num} for keyframe {kf.key}")
+                
                 response.append(
                     KeyframeServiceReponse(
                         key=kf.key,
-                        video_num=kf.video_num,
+                        video_num=safe_convert_video_num(kf.video_num),
                         group_num=kf.group_num,
                         keyframe_num=kf.keyframe_num,
                         confidence_score=result.distance,
@@ -270,7 +293,7 @@ class KeyframeQueryService:
             filtered_response.append(
                 KeyframeServiceReponse(
                     key=kf.key,
-                    video_num=kf.video_num,
+                    video_num=safe_convert_video_num(kf.video_num),
                     group_num=kf.group_num,
                     keyframe_num=kf.keyframe_num,
                     confidence_score=r.distance,
@@ -291,19 +314,29 @@ class KeyframeQueryService:
     ) -> list[KeyframeServiceReponse]:
         """
         Search within a specific time window of a video
-        video_id format: "Lxx/Vxxx" or "group/video"
+        video_id format: "Lxx/Lxx_Vxxx"
         """
         
         # Parse video_id to extract group_num and video_num
-        if '/' in video_id:
-            parts = video_id.replace('L', '').replace('V', '').split('/')
-            try:
-                group_num = int(parts[0])
-                video_num = int(parts[1])
-            except (ValueError, IndexError):
-                raise ValueError(f"Invalid video_id format: {video_id}")
+        parts = video_id.split('/')
+        if len(parts) >= 2:
+            group_part = parts[0].replace('L', '')
+            video_part = parts[1]
+            
+            # Handle different video part formats
+            if video_part.startswith('V'):
+                # Format: "V001" -> extract "001"
+                video_num = int(video_part[1:])
+            elif '_V' in video_part:
+                # Format: "L20_V001" -> extract "001"
+                video_num = int(video_part.split('_V')[-1])
+            else:
+                # Assume it's already a number
+                video_num = int(video_part)
+            
+            group_num = int(group_part)
         else:
-            raise ValueError(f"video_id must be in format 'Lxx/Vxxx' or 'group/video'")
+            raise ValueError(f"Invalid video_id format: {video_id}")
 
         return await self.search_by_text_temporal(
             text_embedding=text_embedding,

@@ -23,6 +23,20 @@ from schema.competition import (
 )
 
 
+def safe_convert_video_num(video_num) -> int:
+    """Safely convert video_num to int, handling cases where it might be '26_V288' format"""
+    if isinstance(video_num, str):
+        # Handle cases where video_num might be '26_V288' format
+        if '_V' in video_num:
+            # Extract just the video number part
+            video_part = video_num.split('_V')[-1]
+            return int(video_part)
+        else:
+            return int(video_num)
+    else:
+        return int(video_num)
+
+
 class VCMRAgent:
     """Video Corpus Moment Retrieval Agent"""
     
@@ -291,7 +305,7 @@ class VideoQAAgent:
         video_parts = request.video_id.split('/')
         if len(video_parts) >= 2:
             group_num = int(video_parts[0][1:])  # Remove 'L' prefix
-            video_num = int(video_parts[1][1:])   # Remove 'V' prefix
+            video_num = safe_convert_video_num(video_parts[1])   # Remove 'V' prefix
         else:
             raise ValueError(f"Invalid video_id format: {request.video_id}")
         
@@ -338,14 +352,14 @@ class VideoQAAgent:
         for kf in keyframes[:10]:  # Limit to top 10 for LLM context
             image_path = os.path.join(
                 self.data_folder, 
-                f"L{kf.group_num:02d}/V{kf.video_num:03d}/{kf.keyframe_num:08d}.webp"
+                f"L{str(kf.group_num):0>2s}/L{str(kf.group_num):0>2s}_V{str(safe_convert_video_num(kf.video_num)):0>3s}/{str(kf.keyframe_num):0>3d}.jpg"
             )
             
             timestamp = self.temporal_localizer.keyframe_to_timestamp(
                 kf.group_num, kf.video_num, kf.keyframe_num
             )
             
-            keyframe_key = f"L{kf.group_num:02d}/V{kf.video_num:03d}/{kf.keyframe_num:08d}.webp"
+            keyframe_key = f"L{str(kf.group_num):0>2s}/L{str(kf.group_num):0>2s}_V{str(safe_convert_video_num(kf.video_num)):0>3s}/{str(kf.keyframe_num):0>3d}.jpg"
             objects = self.objects_data.get(keyframe_key, [])
             
             info = f"Keyframe at {timestamp:.1f}s - Objects: {', '.join(objects) if objects else 'None'}"
@@ -464,7 +478,7 @@ class KISAgent:
         end_time = center_time + 1.0
         
         return KISResponse(
-            video_id=f"L{best_keyframe.group_num:02d}/V{best_keyframe.video_num:03d}",
+            video_id=f"L{str(best_keyframe.group_num):0>2s}/L{str(best_keyframe.group_num):0>2s}_V{str(safe_convert_video_num(best_keyframe.video_num)):0>3s}",
             start_time=start_time,
             end_time=end_time,
             match_confidence=best_keyframe.confidence_score
@@ -501,7 +515,7 @@ class KISAgent:
         )
         
         return KISResponse(
-            video_id=f"L{best_keyframe.group_num:02d}/V{best_keyframe.video_num:03d}",
+            video_id=f"L{str(best_keyframe.group_num):0>2s}/L{str(best_keyframe.group_num):0>2s}_V{str(safe_convert_video_num(best_keyframe.video_num)):0>3s}",
             start_time=max(0, center_time - 0.5),
             end_time=center_time + 0.5,
             match_confidence=best_keyframe.confidence_score
@@ -551,14 +565,14 @@ class KISAgent:
         self.progressive_state[session_key]["search_history"].append({
             "query": combined_query,
             "best_match": {
-                "video_id": f"L{best_keyframe.group_num:02d}/V{best_keyframe.video_num:03d}",
+                "video_id": f"L{str(best_keyframe.group_num):0>2s}/L{str(best_keyframe.group_num):0>2s}_V{str(safe_convert_video_num(best_keyframe.video_num)):0>3s}",
                 "timestamp": center_time,
                 "confidence": best_keyframe.confidence_score
             }
         })
         
         return KISResponse(
-            video_id=f"L{best_keyframe.group_num:02d}/V{best_keyframe.video_num:03d}",
+            video_id=f"L{str(best_keyframe.group_num):0>2s}/L{str(best_keyframe.group_num):0>2s}_V{str(safe_convert_video_num(best_keyframe.video_num)):0>3s}",
             start_time=max(0, center_time - 1.0),
             end_time=center_time + 1.0,
             match_confidence=best_keyframe.confidence_score

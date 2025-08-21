@@ -477,10 +477,13 @@ def validate_competition_setup(
             validation_result["errors"].append(f"Failed to create data folder '{data_folder}': {e}")
             validation_result["data_stats"]["keyframe_count"] = 0
     else:
-        # Count keyframe files
+        # Count keyframe files (.webp for L01-L20, .jpg/.jpeg common for L21-L30)
         keyframe_count = 0
+        allowed_exts = {'.webp', '.jpg', '.jpeg'}
         for root, dirs, files in os.walk(data_folder):
-            keyframe_count += len([f for f in files if f.endswith('.webp')])
+            keyframe_count += sum(
+                1 for f in files if os.path.splitext(f)[1].lower() in allowed_exts
+            )
         validation_result["data_stats"]["keyframe_count"] = keyframe_count
     
     # Check objects file

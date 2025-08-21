@@ -12,6 +12,19 @@ sys.path.insert(0, ROOT_DIR)
 
 from app.core.settings import AppSettings
 
+def safe_convert_video_num(video_num) -> int:
+    """Safely convert video_num to int, handling cases where it might be '26_V288' format"""
+    if isinstance(video_num, str):
+        # Handle cases where video_num might be '26_V288' format
+        if '_V' in video_num:
+            # Extract just the video number part
+            video_part = video_num.split('_V')[-1]
+            return int(video_part)
+        else:
+            return int(video_num)
+    else:
+        return int(video_num)
+
 # Page configuration
 st.set_page_config(
     page_title="Keyframe Search",
@@ -142,7 +155,8 @@ with col1:
     # Search parameters
     col_param1, col_param2 = st.columns(2)
     with col_param1:
-        top_k = st.slider("📊 Max Results", min_value=1, max_value=200, value=10)
+        # Limit top_k to 100 for API compatibility
+        top_k = st.slider("📊 Max Results", min_value=1, max_value=100, value=10)
     with col_param2:
         score_threshold = st.slider("🎯 Min Score", min_value=0.0, max_value=1.0, value=0.0, step=0.1)
 
@@ -411,21 +425,29 @@ if st.button("🚀 Search", use_container_width=True):
                         st.error(f"❌ API Error: {response.status_code} - {response.text}")
                     
                     # Skip the normal POST request processing for this mode
-                    st.stop()
+                    # st.stop()
                 
                 elif search_mode == "GRAB Search":
+                    # Validate top_k for GRAB search (max 100)
+                    if top_k > 100:
+                        st.error("❌ GRAB Search Error: top_k cannot exceed 100. Please reduce the Max Results value.")
+                        st.stop()
+                    
                     endpoint = f"{st.session_state.api_base_url}/api/v1/temporal/search/enhanced-moments"
                     # Use GET parameters for GRAB search
                     params = {
                         "query": query,
                         "start_time": grab_start_time if grab_start_time > 0 else None,
                         "end_time": grab_end_time if grab_end_time > grab_start_time else None,
-                        "video_id": grab_video_id if grab_video_id.strip() else None,
                         "top_k": top_k,
                         "score_threshold": score_threshold,
                         "optimization_level": grab_optimization
                     }
                     
+                    # Only add video_id if it's provided
+                    if grab_video_id and grab_video_id.strip():
+                        params["video_id"] = grab_video_id.strip()
+                        
                     # Remove None values
                     params = {k: v for k, v in params.items() if v is not None}
                     
@@ -439,23 +461,73 @@ if st.button("🚀 Search", use_container_width=True):
                         # Convert moments to results format for display
                         results = []
                         for moment in moments:
-                            # Extract video info from video_id
-                            group_num = int(moment["video_id"].split('/')[0][1:])
-                            video_num = int(moment["video_id"].split('/')[1][1:])
-                            
-                            # Use first evidence keyframe for path, fallback to keyframe_range
-                            evidence_keyframes = moment.get("evidence_keyframes", [])
-                            if evidence_keyframes:
-                                kf_num = evidence_keyframes[0]
-                            else:
-                                # Fallback: use keyframe_start from keyframe_range
-                                keyframe_range = moment.get("keyframe_range", {})
-                                kf_num = keyframe_range.get("start", 0)  # Use 0 as fallback
-                            
-                            path = (
-                                f"{app_settings.KEYFRAMES_PATH}/"
-                                f"L{group_num:02d}/V{video_num:03d}/{kf_num:08d}.webp"
-                            )
+                            try:
+                                
+                                # Check if moment has the expected structure
+                                if "video_id" not in moment:
+                                    continue
+                                
+                                video_id = moment["video_id"]
+                                
+                                # Handle different video_id formats
+                                if '/' in video_id:
+                                    # Format: "L26/L26_V138" or similar
+                                    parts = video_id.split('/')
+                                    group_part = parts[0]
+                                    video_part = parts[1] if len(parts) > 1 else parts[0]
+                                    
+                                    # Extract group number
+                                    if group_part.startswith('L'):
+                                        group_num = int(group_part[1:])
+                                    else:
+                                        group_num = int(group_part)
+                                    
+                                    # Extract video number
+                                    if video_part.startswith('L'):
+                                        video_num_raw = video_part[1:]  # Remove 'L' prefix
+                                    elif video_part.startswith('V'):
+                                        video_num_raw = video_part[1:]  # Remove 'V' prefix
+                                    else:
+                                        video_num_raw = video_part
+                                    
+                                    video_num = safe_convert_video_num(video_num_raw)
+                                    
+                                else:
+                                    # Fallback: assume it's just a group number or path
+                                    print(f"WARNING: Unexpected video_id format: {video_id}")
+                                    continue
+                                
+                                
+                                # Use first evidence keyframe for path, fallback to keyframe_range
+                                evidence_keyframes = moment.get("evidence_keyframes", [])
+                                if evidence_keyframes:
+                                    # Extract keyframe number from file path
+                                    # Format: 'C:\\...\\L21\\L21_V024\\011.jpg' -> 011
+                                    kf_path = evidence_keyframes[0]
+                                    if isinstance(kf_path, str) and '\\' in kf_path:
+                                        # Extract filename without extension
+                                        filename = os.path.basename(kf_path)
+                                        kf_num = int(filename.split('.')[0])  # Remove .jpg extension
+                                    else:
+                                        kf_num = int(kf_path)  # If it's already a number
+                                else:
+                                    # Fallback: use keyframe_start from keyframe_range
+                                    keyframe_range = moment.get("keyframe_range", {})
+                                    kf_num = keyframe_range.get("start", 0)  # Use 0 as fallback
+                                
+                                # Ensure all values are integers
+                                group_num = int(group_num)
+                                video_num = int(video_num)
+                                kf_num = int(kf_num)
+                                
+                                # Fix the path construction to avoid f-string backslash issue
+                                keyframes_path = app_settings.KEYFRAMES_PATH.replace('\\', '/')
+                                path = f"{keyframes_path}/L{group_num:02d}/L{group_num:02d}_V{video_num:03d}/{kf_num:03d}.jpg"
+                                
+                            except Exception as e:
+                                print(f"ERROR processing moment: {e}")
+                                print(f"Moment data: {moment}")
+                                continue
                             
                             results.append({
                                 "path": path,
@@ -473,14 +545,6 @@ if st.button("🚀 Search", use_container_width=True):
                         # Show GRAB-specific metrics
                         if data.get("optimization_level"):
                             st.info(f"**Optimization**: {data['optimization_level'].title()} mode applied")
-
-                        payload = {
-                            "query": query,
-                            "top_k": top_k,
-                            "score_threshold": score_threshold,
-                            "optimization_level": grab_optimization,
-                            
-                        }
                         
                     else:
                         st.error(f"❌ GRAB Search Error: {response.status_code} - {response.text}")
@@ -524,6 +588,8 @@ if st.button("🚀 Search", use_container_width=True):
                 st.error(f"❌ Connection Error: {str(e)}")
             except Exception as e:
                 st.error(f"❌ Unexpected Error: {str(e)}")
+                import traceback
+                st.error(f"Traceback: {traceback.format_exc()}")
 
 
 # Display results

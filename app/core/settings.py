@@ -32,7 +32,7 @@ class KeyFrameIndexMilvusSetting(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=str(ENV_PATH), env_file_encoding='utf-8', case_sensitive=False, extra='ignore'
     )
-    COLLECTION_NAME: str = "keyframe"
+    COLLECTION_NAME: str = "keyframe_embeddings"
     HOST: str = 'localhost'
     PORT: str = '19530'
     METRIC_TYPE: str = 'COSINE'
@@ -45,11 +45,11 @@ class AppSettings(BaseSettings):
         env_file=str(ENV_PATH), env_file_encoding='utf-8', case_sensitive=False, extra='ignore'
     )
     # model
-    MODEL_NAME: str = "hf-hub:laion/CLIP-convnext_xxlarge-laion2B-s34B-b82K-augreg-soup"
+    MODEL_NAME: str = "ViT-B-32"
     # data folder
     DATA_FOLDER: str  = str(REPO_ROOT / 'resources' / 'keyframes')
     KEYFRAMES_PATH: str = str(REPO_ROOT / 'resources' / 'keyframes')
-    ID2INDEX_PATH: str = str(REPO_ROOT / 'resources' / 'embeddings_keys' / 'id2index.json')
+    ID2INDEX_PATH: str = str(REPO_ROOT / 'resources' / 'keyframes' / 'id2index.json')
     FRAME2OBJECT: str = str(REPO_ROOT / 'resources' / 'detections.json')
     ASR_FILE: str = str(REPO_ROOT / 'resources' / 'asr_proc.json')
     OBJECTS_FILE: str = str(REPO_ROOT / 'resources' / 'objects.json')

@@ -115,21 +115,44 @@ class QueryController:
         self,
         model: KeyframeServiceReponse
     ) -> tuple[str, float]:
-        # Dataset structure from L01 -> L20: <DATA_FOLDER>/Lxx/Vxxx/<frame>.webp
-        # Dataset structure from L21 -> L30: <DATA_FOLDER>/Lxx_Vxxx/<frame>.jpg
+        # keyframe path structure from L21 -> L30: <DATA_FOLDER>/Lxx/Lxx_Vxxx/<frame>.jpg
         if model.group_num < 21:
             return os.path.join(
                 self.data_folder,
-                f"L{model.group_num:02d}",
-                f"V{model.video_num:03d}",
-                f"{model.keyframe_num:08d}.webp",
+                f"L{str(model.group_num):0>2s}",
+                f"V{str(model.video_num):0>3s}",
+                f"{str(model.keyframe_num):0>8s}.webp",
             ), model.confidence_score
         else:
-            return os.path.join(
-                self.data_folder,
-                f"L{model.group_num:02d}_V{model.video_num:03d}",
-                f"{model.keyframe_num:08d}.jpg",
-            ), model.confidence_score
+            # Support nested layouts for L21-L30:
+            # - Nested: <DATA_FOLDER>/Lxx/Lxx_Vxxx/<frame>.jpg
+            base_dir = os.path.join(
+                self.data_folder, 
+                f"L{str(model.group_num):0>2s}", 
+                f"L{str(model.group_num):0>2s}_V{str(model.video_num):0>3s}"
+            )
+
+            # Try different filename patterns, prioritizing shorter formats
+            # Most common: 197.jpg, 068.jpg (no padding)
+            candidates = [
+                # f"{str(model.keyframe_num)}.jpg",           # 197.jpg
+                f"{str(model.keyframe_num):0>3s}.jpg",       # 197.jpg (3-digit padding)
+                # f"{str(model.keyframe_num):0>4s}.jpg",       # 0197.jpg (4-digit padding)
+                # f"{str(model.keyframe_num):0>6s}.jpg",       # 000197.jpg (6-digit padding)
+                # f"{str(model.keyframe_num):0>8s}.jpg",       # 00000197.jpg (8-digit padding)
+            ]
+
+            for filename in candidates:
+                full_path = os.path.join(base_dir, filename)
+                try:
+                    if os.path.exists(full_path):
+                        return full_path, model.confidence_score
+                except Exception:
+                    # If existence check fails, continue to next candidate
+                    pass
+
+            # Fallback to no padding (most common format)
+            return os.path.join(base_dir, f"{str(model.keyframe_num)}.jpg"), model.confidence_score
         
     async def search_text(
         self, 
@@ -239,14 +262,27 @@ class QueryController:
         video_nums = include_videos
         
         if video_id:
-            parts = video_id.replace('L', '').replace('V', '').split('/')
-            try:
-                group_num = int(parts[0])
-                video_num = int(parts[1])
+            parts = video_id.split('/')
+            if len(parts) >= 2:
+                group_part = parts[0].replace('L', '')
+                video_part = parts[1]
+                
+                # Handle different video part formats
+                if video_part.startswith('V'):
+                    # Format: "V001" -> extract "001"
+                    video_num = int(video_part[1:])
+                elif '_V' in video_part:
+                    # Format: "L20_V001" -> extract "001"
+                    video_num = int(video_part.split('_V')[-1])
+                else:
+                    # Assume it's already a number
+                    video_num = int(video_part)
+                
+                group_num = int(group_part)
                 # Override with specific video if provided
                 group_nums = [group_num]
                 video_nums = [video_num]
-            except (ValueError, IndexError):
+            else:
                 raise ValueError(f"Invalid video_id format: {video_id}")
 
         refined_query, suggested_objects = await self._refine_query(query)

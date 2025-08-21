@@ -25,6 +25,20 @@ router = APIRouter(
 )
 
 
+def safe_convert_video_num(video_num) -> int:
+    """Safely convert video_num to int, handling cases where it might be '26_V288' format"""
+    if isinstance(video_num, str):
+        # Handle cases where video_num might be '26_V288' format
+        if '_V' in video_num:
+            # Extract just the video number part
+            video_part = video_num.split('_V')[-1]
+            return int(video_part)
+        else:
+            return int(video_num)
+    else:
+        return int(video_num)
+
+
 @router.post(
     "/search/time-range",
     response_model=KeyframeDisplay,
@@ -258,27 +272,48 @@ async def temporal_search(
         
         logger.info(f"GRAB framework found {len(moments)} enhanced moments")
         
+        # Convert evidence keyframes to proper paths
+        moments_with_paths = []
+        for moment in moments:
+            # Convert evidence keyframes to KeyframeServiceReponse objects for path conversion
+            evidence_keyframe_objects = []
+            for keyframe_num in moment.evidence_keyframes:
+                # Create a KeyframeServiceReponse object for path conversion
+                keyframe_obj = KeyframeServiceReponse(
+                    key=int(keyframe_num),  
+                    video_num=safe_convert_video_num(moment.video_num),
+                    group_num=int(moment.group_num),
+                    keyframe_num=int(keyframe_num),  
+                    confidence_score=float(moment.confidence_score)
+                )
+                evidence_keyframe_objects.append(keyframe_obj)
+            
+            # Convert to paths using the controller's convert_model_to_path method
+            evidence_paths = []
+            for keyframe_obj in evidence_keyframe_objects:
+                path, score = controller.convert_model_to_path(keyframe_obj)
+                evidence_paths.append(path)
+            
+            moments_with_paths.append({
+                "video_id": moment.video_id,
+                "start_time": moment.start_time,
+                "end_time": moment.end_time,
+                "duration": round(moment.end_time - moment.start_time, 2),
+                "confidence_score": round(moment.confidence_score, 4),
+                "evidence_keyframes": evidence_paths,  # Now contains proper paths
+                "keyframe_range": {
+                    "start": moment.keyframe_start,
+                    "end": moment.keyframe_end
+                }
+            })
+        
         return {
             "framework": "GRAB",
             "query": query,
             "time_range": {"start": start_time, "end": end_time} if start_time and end_time else None,
             "video_id": video_id,
             "optimization_level": optimization_level,
-            "moments": [
-                {
-                    "video_id": moment.video_id,
-                    "start_time": moment.start_time,
-                    "end_time": moment.end_time,
-                    "duration": round(moment.end_time - moment.start_time, 2),
-                    "confidence_score": round(moment.confidence_score, 4),
-                    "evidence_keyframes": moment.evidence_keyframes,
-                    "keyframe_range": {
-                        "start": moment.keyframe_start,
-                        "end": moment.keyframe_end
-                    }
-                }
-                for moment in moments
-            ],
+            "moments": moments_with_paths,
             "total_moments": len(moments)
         }
         

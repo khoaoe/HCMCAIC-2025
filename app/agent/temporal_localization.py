@@ -3,11 +3,25 @@ Temporal Localization Module
 Converts keyframe-based results to temporal moments with start_time/end_time
 """
 
-from typing import List, Dict, Tuple, Optional, Any
+from typing import List, Dict, Any, Optional
 import json
 from pathlib import Path
 from schema.response import KeyframeServiceReponse
 from schema.competition import TemporalMapping, MomentCandidate
+
+
+def safe_convert_video_num(video_num) -> int:
+    """Safely convert video_num to int, handling cases where it might be '26_V288' format"""
+    if isinstance(video_num, str):
+        # Handle cases where video_num might be '26_V288' format
+        if '_V' in video_num:
+            # Extract just the video number part
+            video_part = video_num.split('_V')[-1]
+            return int(video_part)
+        else:
+            return int(video_num)
+    else:
+        return int(video_num)
 
 
 class TemporalLocalizer:
@@ -30,7 +44,11 @@ class TemporalLocalizer:
             with open(metadata_path) as f:
                 data = json.load(f)
                 for video_info in data:
-                    video_key = f"L{video_info['group_num']:02d}/V{video_info['video_num']:03d}"
+                    # Create video key for metadata lookup
+                    if video_info['group_num'] < 21:
+                        video_key = f"L{str(video_info['group_num']):0>2s}/V{str(video_info['video_num']):0>3s}"
+                    else:
+                        video_key = f"L{str(video_info['group_num']):0>2s}/L{str(video_info['group_num']):0>2s}_V{str(video_info['video_num']):0>3s}"
                     self.video_metadata[video_key] = TemporalMapping(**video_info)
         except Exception as e:
             print(f"Warning: Could not load video metadata: {e}")
@@ -43,7 +61,11 @@ class TemporalLocalizer:
         fps: Optional[float] = None
     ) -> float:
         """Convert keyframe number to timestamp in seconds"""
-        video_key = f"L{group_num:02d}/V{video_num:03d}"
+        # Create video key for metadata lookup
+        if group_num < 21:
+            video_key = f"L{str(group_num):0>2s}/V{str(video_num):0>3s}"
+        else:
+            video_key = f"L{str(group_num):0>2s}/L{str(group_num):0>2s}_V{str(video_num):0>3s}"
         
         if video_key in self.video_metadata:
             fps = fps or self.video_metadata[video_key].fps
@@ -72,7 +94,7 @@ class TemporalLocalizer:
         last_kf = sorted_keyframes[-1]
         
         # Get video metadata
-        video_key = f"L{first_kf.group_num:02d}/V{first_kf.video_num:03d}"
+        video_key = f"L{str(first_kf.group_num):0>2s}/V{str(first_kf.video_num):0>3s}"
         fps = self.default_fps
         if video_key in self.video_metadata:
             fps = self.video_metadata[video_key].fps
@@ -104,10 +126,20 @@ class TemporalLocalizer:
         # Calculate average confidence
         avg_confidence = sum(kf.confidence_score for kf in keyframes) / len(keyframes)
         
+        # Create video ID for the moment
+        if first_kf.group_num < 21:
+            video_id=f"L{str(first_kf.group_num):0>2s}/V{str(first_kf.video_num):0>3s}"
+        else:
+            video_id=f"L{str(first_kf.group_num):0>2s}/L{str(first_kf.group_num):0>2s}_V{str(first_kf.video_num):0>3s}"
+        
+        # Debug: Check if video_num is corrupted
+        if isinstance(first_kf.video_num, str) and '_V' in first_kf.video_num:
+            print(f"WARNING: Corrupted video_num in temporal localization: {first_kf.video_num} for keyframe {first_kf.keyframe_num}")
+        
         return MomentCandidate(
-            video_id=f"L{first_kf.group_num:02d}/V{first_kf.video_num:03d}",
+            video_id=video_id,
             group_num=first_kf.group_num,
-            video_num=first_kf.video_num,
+            video_num=safe_convert_video_num(first_kf.video_num),
             keyframe_start=first_kf.keyframe_num,
             keyframe_end=last_kf.keyframe_num,
             start_time=start_time,

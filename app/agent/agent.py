@@ -5,11 +5,32 @@ from llama_index.core import PromptTemplate
 from schema.agent import AgentResponse
 from pathlib import Path
 
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Any
 from collections import defaultdict
 from schema.response import KeyframeServiceReponse
 import os
 from llama_index.core.llms import ChatMessage, ImageBlock, TextBlock, MessageRole
+from dataclasses import dataclass
+
+
+def safe_convert_video_num(video_num) -> int:
+    """Safely convert video_num to int, handling cases where it might be '26_V288' format"""
+    if isinstance(video_num, str):
+        # Handle cases where video_num might be '26_V288' format
+        if '_V' in video_num:
+            # Extract just the video number part
+            video_part = video_num.split('_V')[-1]
+            return int(video_part)
+        else:
+            return int(video_num)
+    else:
+        return int(video_num)
+
+
+@dataclass
+class AgentResponse:
+    refined_query: str
+    list_of_objects: List[str]
 
 
 COCO_CLASS = """
@@ -169,10 +190,10 @@ class AnswerGenerator:
     ):
         chat_messages = []
         for kf in final_keyframes:
-            keyy = f"L{kf.group_num:02d}/V{kf.video_num:03d}/{kf.keyframe_num:08d}.webp"
+            keyy = f"L{str(kf.group_num):0>2s}/L{str(kf.group_num):0>2s}_V{str(safe_convert_video_num(kf.video_num)):0>3s}/{str(kf.keyframe_num):0>3d}.jpg"
             objects = objects_data.get(keyy, [])
 
-            image_path = os.path.join(self.data_folder, f"L{kf.group_num:02d}/V{kf.video_num:03d}/{kf.keyframe_num:08d}.webp")
+            image_path = os.path.join(self.data_folder, f"L{str(kf.group_num):0>2s}/L{str(kf.group_num):0>2s}_V{str(safe_convert_video_num(kf.video_num)):0>3s}/{str(kf.keyframe_num):0>3d}.jpg")
 
             context_text = f"""
             Keyframe {kf.key} from Video {kf.video_num} (Confidence: {kf.confidence_score:.3f}):

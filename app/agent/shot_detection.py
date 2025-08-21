@@ -15,6 +15,20 @@ from pathlib import Path
 from schema.response import KeyframeServiceReponse
 
 
+def safe_convert_video_num(video_num) -> int:
+    """Safely convert video_num to int, handling cases where it might be '26_V288' format"""
+    if isinstance(video_num, str):
+        # Handle cases where video_num might be '26_V288' format
+        if '_V' in video_num:
+            # Extract just the video number part
+            video_part = video_num.split('_V')[-1]
+            return int(video_part)
+        else:
+            return int(video_num)
+    else:
+        return int(video_num)
+
+
 @dataclass
 class Shot:
     """Represents a video shot with start/end frames"""
@@ -81,7 +95,7 @@ class ShotDetector:
             
             # Check if same video and within temporal threshold
             if (curr_kf.group_num == prev_kf.group_num and 
-                curr_kf.video_num == prev_kf.video_num and 
+                safe_convert_video_num(curr_kf.video_num) == safe_convert_video_num(prev_kf.video_num) and 
                 gap <= temporal_gap_threshold):
                 current_shot_frames.append(curr_kf.keyframe_num)
             else:
@@ -187,7 +201,7 @@ class PerceptualHashDeduplicator:
         for kf in keyframes:
             image_path = os.path.join(
                 data_folder,
-                f"L{kf.group_num:02d}/V{kf.video_num:03d}/{kf.keyframe_num:08d}.webp"
+                f"L{str(kf.group_num):0>2s}/L{str(kf.group_num):0>2s}_V{str(safe_convert_video_num(kf.video_num)):0>3s}/{int(kf.keyframe_num):0>3d}.jpg"
             )
             
             if os.path.exists(image_path):
