@@ -35,10 +35,18 @@ load_dotenv()
 
 @lru_cache
 def get_llm() -> LLM:
-    return GoogleGenAI(
-        'gemini-2.5-flash-lite',
-        api_key=os.getenv('GOOGLE_GENAI_API')
-    )
+    try:
+        print("🤖 Getting LLM for Agent...") 
+        return GoogleGenAI(
+            'gemini-2.5-flash-lite',
+            api_key=os.getenv('GEMINI_API_KEY')
+        )
+    except Exception as e:
+        logger.error(f"Failed to get LLM: {str(e)}")
+        raise HTTPException(
+            status_code=503,
+            detail=f"LLM initialization failed: {str(e)}"
+        )
 
 
 
@@ -201,11 +209,15 @@ def get_query_controller(
             with open(id2index_path, 'w') as f:
                 json.dump({}, f)
         
+        from pathlib import Path as _Path
+        objects_path = _Path(app_settings.OBJECTS_FILE) if hasattr(app_settings, 'OBJECTS_FILE') else None
         controller = QueryController(
             data_folder=data_folder,
             id2index_path=id2index_path,
             model_service=model_service,
-            keyframe_service=keyframe_service
+            keyframe_service=keyframe_service,
+            llm=get_llm(),
+            objects_data_path=objects_path
         )
         
         logger.info("Query controller created successfully")

@@ -103,6 +103,7 @@ curl "http://localhost:8000/api/v1/temporal/search/video-time-window?query=sunse
 ```bash
 setx HF_TOKEN=<huggingface_token>
 setx HUGGING_FACE_HUB_TOKEN=<same_token>
+setx GEMINI_API_KEY=<google_gemini_api_key>
 ```
 
 6. Run the application

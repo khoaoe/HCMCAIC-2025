@@ -1,5 +1,7 @@
 import logging.handlers
 from pathlib import Path
+import sys
+import io
 
 class SimpleLogger:
     """Simple logger with console and file output."""
@@ -17,7 +19,19 @@ class SimpleLogger:
         
         Path(log_dir).mkdir(exist_ok=True)
         
-        console_handler = logging.StreamHandler()
+        # Configure console stream to handle UTF-8 on Windows consoles
+        console_stream = sys.stdout
+        try:
+            if hasattr(console_stream, 'reconfigure'):
+                console_stream.reconfigure(encoding='utf-8', errors='replace')
+            else:
+                # Wrap with UTF-8 writer if reconfigure is unavailable
+                console_stream = io.TextIOWrapper(console_stream.buffer, encoding='utf-8', errors='replace')
+        except Exception:
+            # Fallback to default stream; errors may display as '?', but won't crash
+            console_stream = sys.stdout
+
+        console_handler = logging.StreamHandler(console_stream)
         console_handler.setLevel(getattr(logging, console_level))
         console_format = logging.Formatter(
             '\033[36m%(asctime)s\033[0m | \033[32m%(levelname)-8s\033[0m | %(name)s | %(funcName)s:%(lineno)d | %(message)s',
@@ -29,7 +43,8 @@ class SimpleLogger:
         file_handler = logging.handlers.RotatingFileHandler(
             f"{log_dir}/{name}.log",
             maxBytes=10*1024*1024,  
-            backupCount=3
+            backupCount=3,
+            encoding='utf-8'
         )
         file_handler.setLevel(getattr(logging, file_level))
         file_format = logging.Formatter(
