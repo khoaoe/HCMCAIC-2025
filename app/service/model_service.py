@@ -29,7 +29,7 @@ class ModelService:
             query_text: Input text to embed
             
         Returns:
-            numpy array of shape (1, 1024) with consistent dtype
+            numpy array of shape (1, 512) with consistent dtype
         """
         with torch.no_grad():
             text_tokens = self.tokenizer([query_text]).to(self.device)
@@ -48,7 +48,7 @@ class ModelService:
             image_path: Path to the image file
             
         Returns:
-            numpy array of shape (1024,) with consistent dtype
+            numpy array of shape (512,) with consistent dtype
         """
         try:
             from PIL import Image
@@ -64,13 +64,13 @@ class ModelService:
                 # Ensure consistent data type (float32 for maximum precision)
                 image_embedding = image_embedding.astype(np.float32)
                 
-                # Return as 1D array (1024,)
+                # Return as 1D array (512,)
                 return image_embedding.flatten()
                 
         except Exception as e:
             print(f"Error embedding image {image_path}: {e}")
             # Return zero embedding as fallback
-            return np.zeros(1024, dtype=np.float32)
+            return np.zeros(512, dtype=np.float32)
     
     def get_embedding_dtype(self) -> np.dtype:
         """

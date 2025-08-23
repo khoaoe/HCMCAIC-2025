@@ -252,13 +252,13 @@ class AdaptiveBidirectionalTemporalSearch:
                 else:
                     print(f"Warning: Image not found for keyframe {kf.key}: {image_path}")
                     # Fallback to zero embedding if image not found
-                    embedding = np.zeros(1024, dtype=np.float32)
+                    embedding = np.zeros(512, dtype=np.float32)
                     embeddings_cache[kf.key] = embedding
                     
             except Exception as e:
                 print(f"Error extracting embedding for keyframe {kf.key}: {e}")
                 # Fallback to zero embedding on error
-                embedding = np.zeros(1024, dtype=np.float32)
+                embedding = np.zeros(512, dtype=np.float32)
                 embeddings_cache[kf.key] = embedding
         
         print(f"ABTS: Built embeddings cache with {len(embeddings_cache)} keyframes")

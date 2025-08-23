@@ -247,12 +247,12 @@ class SuperGlobalReranker:
                     except Exception as e:
                         print(f"Error extracting embedding for {image_path}: {e}")
                         # Fallback to zero embedding on error
-                        zero_embedding = np.zeros(1024, dtype=np.float32)
+                        zero_embedding = np.zeros(512, dtype=np.float32)
                         embeddings.append(zero_embedding)
                         self.embedding_cache[cache_key] = zero_embedding
                 else:
                     # Fallback to zero embedding if image not found
-                    zero_embedding = np.zeros(1024, dtype=np.float32)
+                    zero_embedding = np.zeros(512, dtype=np.float32)
                     embeddings.append(zero_embedding)
         
         return embeddings

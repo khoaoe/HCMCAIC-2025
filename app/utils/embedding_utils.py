@@ -28,7 +28,7 @@ def ensure_float32_embedding(embedding: Union[np.ndarray, List[float], Any]) -> 
         return np.array(embedding, dtype=np.float32)
 
 
-def validate_embedding_shape(embedding: np.ndarray, expected_dim: int = 1024) -> bool:
+def validate_embedding_shape(embedding: np.ndarray, expected_dim: int = 512) -> bool:
     """
     Validate embedding shape and dimensions
     
@@ -135,7 +135,7 @@ def convert_embedding_batch(embeddings: List[np.ndarray]) -> List[np.ndarray]:
         except Exception as e:
             print(f"Warning: Failed to convert embedding {i}: {e}")
             # Return zero embedding as fallback
-            converted.append(np.zeros(1024, dtype=np.float32))
+            converted.append(np.zeros(512, dtype=np.float32))
     
     return converted
 
