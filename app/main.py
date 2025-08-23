@@ -114,6 +114,8 @@ async def lifespan(app: FastAPI):
             milvus_password="",
             milvus_search_params=milvus_search_params,
             model_name=settings.MODEL_NAME,
+            pretrained_weights=settings.PRETRAINED_WEIGHTS,
+            use_pretrained=settings.USE_PRETRAINED,
             mongo_collection=Keyframe
         )
         app.state.service_factory = service_factory

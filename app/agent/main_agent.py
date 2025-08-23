@@ -196,8 +196,7 @@ class KeyframeSearchAgent:
         if not final_keyframes:
             return "Không tìm thấy kết quả phù hợp với truy vấn của bạn."
         
-        # Stage 6: Extract temporal information from the best keyframes
-        # Handle multiple videos properly
+        # Stage 6: Group keyframes by video for temporal analysis
         video_groups = {}
         for kf in final_keyframes:
             video_key = f"{kf.group_num}_{kf.video_num}"
@@ -205,59 +204,99 @@ class KeyframeSearchAgent:
                 video_groups[video_key] = []
             video_groups[video_key].append(kf)
         
-        # Find the video with the highest average confidence score
-        best_video_key = max(video_groups.keys(), 
-                           key=lambda k: sum(kf.confidence_score for kf in video_groups[k]) / len(video_groups[k]))
-        best_video_keyframes = video_groups[best_video_key]
+        # Stage 7: Extract temporal information from ALL keyframes across ALL videos
+        # Process each video group separately to maintain temporal context
+        all_video_segments = []
         
-        smallest_kf = min(best_video_keyframes, key=lambda x: int(x.keyframe_num))
-        max_kf = max(best_video_keyframes, key=lambda x: int(x.keyframe_num))
-
-        print(f"Best video keyframes: {len(best_video_keyframes)} from video {best_video_key}")
-        print(f"{smallest_kf=}")
-        print(f"{max_kf=}")
-
-        group_num = smallest_kf.group_num
-        video_num = smallest_kf.video_num
-
-        print(f"{group_num}")
-        print(f"{video_num}")
-        print(f"L{str(group_num):0>2s}/L{str(group_num):0>2s}_V{str(video_num):0>3s}")
+        for video_key, video_keyframes in video_groups.items():
+            if not video_keyframes:
+                continue
+                
+            # Sort keyframes by frame number for this video
+            sorted_keyframes = sorted(video_keyframes, key=lambda x: int(x.keyframe_num))
+            smallest_kf = sorted_keyframes[0]
+            max_kf = sorted_keyframes[-1]
+            
+            group_num = smallest_kf.group_num
+            video_num = smallest_kf.video_num
+            
+            print(f"Processing video {video_key}: {len(video_keyframes)} keyframes")
+            print(f"Temporal range: {smallest_kf.keyframe_num} to {max_kf.keyframe_num}")
+            
+            # Extract ASR text for this video's temporal segment
+            matching_asr = None
+            for entry in self.asr_data.values():
+                if isinstance(entry, dict) and entry.get("file_path") == f"L{str(group_num):0>2s}/L{str(group_num):0>2s}_V{str(video_num):0>3s}":
+                    matching_asr = entry
+                    break
+            
+            asr_text = ""
+            if matching_asr and "result" in matching_asr:
+                asr_entries = matching_asr["result"]
+                asr_text_segments = []
+                for seg in asr_entries:
+                    if isinstance(seg, dict):
+                        start_frame = int(seg.get("start_frame", 0))
+                        end_frame = int(seg.get("end_frame", 0))
+                        if (int(smallest_kf.keyframe_num) <= start_frame <= int(max_kf.keyframe_num) or
+                            int(smallest_kf.keyframe_num) <= end_frame <= int(max_kf.keyframe_num)):
+                            text = seg.get("text", "").strip()
+                            if text:
+                                asr_text_segments.append(text)
+                asr_text = " ".join(asr_text_segments)
+            
+            # Store video segment information
+            video_segment = {
+                'video_key': video_key,
+                'group_num': group_num,
+                'video_num': video_num,
+                'keyframes': video_keyframes,
+                'temporal_range': (int(smallest_kf.keyframe_num), int(max_kf.keyframe_num)),
+                'asr_text': asr_text,
+                'avg_confidence': sum(kf.confidence_score for kf in video_keyframes) / len(video_keyframes)
+            }
+            all_video_segments.append(video_segment)
         
-        # Extract ASR text for the temporal segment
-        matching_asr = None
-        for entry in self.asr_data.values():
-            if isinstance(entry, dict) and entry.get("file_path") == f"L{str(group_num):0>2s}/L{str(group_num):0>2s}_V{str(video_num):0>3s}":
-                matching_asr = entry
-                break
+        # Sort video segments by average confidence score
+        all_video_segments.sort(key=lambda x: x['avg_confidence'], reverse=True)
         
-        asr_text = ""
-        if matching_asr and "result" in matching_asr:
-            asr_entries = matching_asr["result"]
-            asr_text_segments = []
-            for seg in asr_entries:
-                if isinstance(seg, dict):
-                    start_frame = int(seg.get("start_frame", 0))
-                    end_frame = int(seg.get("end_frame", 0))
-                    if (int(smallest_kf.keyframe_num) <= start_frame <= int(max_kf.keyframe_num) or
-                        int(smallest_kf.keyframe_num) <= end_frame <= int(max_kf.keyframe_num)):
-                        text = seg.get("text", "").strip()
-                        if text:
-                            asr_text_segments.append(text)
-            asr_text = " ".join(asr_text_segments)
-        print(f"ASR text for segment: {asr_text[:200]}...")
+        print(f"Processed {len(all_video_segments)} video segments")
+        for segment in all_video_segments:
+            print(f"Video {segment['video_key']}: {len(segment['keyframes'])} keyframes, avg confidence: {segment['avg_confidence']:.3f}")
 
-        # Stage 7: Generate answer with all relevant keyframes from all videos
-        # Include information about which videos were found
-        video_info = f"Find results from {len(video_groups)} videos. "
-        if len(video_groups) > 1:
-            video_info += f"Main video: {best_video_key}, other videos: {', '.join([k for k in video_groups.keys() if k != best_video_key])}"
+        # Stage 8: Generate comprehensive answer with information from all videos
+        # Combine ASR text from all relevant videos
+        combined_asr_text = ""
+        if all_video_segments:
+            # Use ASR from the highest confidence video as primary, others as supplementary
+            primary_asr = all_video_segments[0]['asr_text']
+            supplementary_asr = []
+            
+            for segment in all_video_segments[1:]:
+                if segment['asr_text'] and segment['asr_text'] != primary_asr:
+                    supplementary_asr.append(f"[Video {segment['video_key']}]: {segment['asr_text']}")
+            
+            combined_asr_text = primary_asr
+            if supplementary_asr:
+                combined_asr_text += " " + " ".join(supplementary_asr)
+        
+        # Create video summary information
+        video_summary = f"Found relevant content in {len(all_video_segments)} videos: "
+        video_details = []
+        for i, segment in enumerate(all_video_segments):
+            if i == 0:
+                video_details.append(f"Primary: Video {segment['video_key']} ({len(segment['keyframes'])} keyframes)")
+            else:
+                video_details.append(f"Video {segment['video_key']} ({len(segment['keyframes'])} keyframes)")
+        
+        video_summary += "; ".join(video_details)
+        print(f"Video summary: {video_summary}")
         
         answer = await self.answer_generator.generate_answer(
             original_query=user_query,
             final_keyframes=final_keyframes,
             objects_data=self.objects_data,
-            asr_data=asr_text
+            asr_data=combined_asr_text
         )
 
         return cast(str, answer)

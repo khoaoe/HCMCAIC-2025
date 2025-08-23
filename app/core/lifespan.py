@@ -71,6 +71,8 @@ async def lifespan(app: FastAPI):
             milvus_password="",  
             milvus_search_params=milvus_search_params,
             model_name=appsetting.MODEL_NAME,
+            pretrained_weights=appsetting.PRETRAINED_WEIGHTS,
+            use_pretrained=appsetting.USE_PRETRAINED,
             mongo_collection=Keyframe
         )
         logger.info("Service factory initialized successfully")

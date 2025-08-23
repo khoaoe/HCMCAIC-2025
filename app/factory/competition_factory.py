@@ -313,6 +313,8 @@ class CompetitionFactory:
             milvus_password="",
             milvus_search_params=milvus_search_params,
             model_name=self.settings.MODEL_NAME,
+            pretrained_weights=self.settings.PRETRAINED_WEIGHTS,
+            use_pretrained=self.settings.USE_PRETRAINED,
             mongo_collection=Keyframe
         )
 

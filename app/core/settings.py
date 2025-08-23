@@ -44,10 +44,10 @@ class AppSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=str(ENV_PATH), env_file_encoding='utf-8', case_sensitive=False, extra='ignore'
     )
-    # model
+    # model configuration
     MODEL_NAME: str = "ViT-B-32"
-    # PRETAINED: bool = True
-    # PRETRAINED_NAME: str = "laion2b_s34b_b79k"
+    USE_PRETRAINED: bool = True  # Whether to use pretrained weights (True=better performance, False=faster startup)
+    PRETRAINED_WEIGHTS: str = "laion2b_s34b_b79k"  # Explicit pretrained weights (only used if USE_PRETRAINED=True)
     # data folder
     DATA_FOLDER: str  = str(REPO_ROOT / 'resources' / 'keyframes')
     KEYFRAMES_FOLDER: str = str(REPO_ROOT / 'resources' / 'keyframes')
