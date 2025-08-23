@@ -74,16 +74,22 @@ class NPYEmbeddingMigrator:
         
     def load_npy_file(self, filepath: Path) -> np.ndarray:
         """
-        Load a .npy file and return the embeddings array
+        Load a .npy file and return the embeddings array with consistent data type
         
         Args:
             filepath: Path to the .npy file
             
         Returns:
-            NumPy array of embeddings
+            NumPy array of embeddings with consistent dtype (float32)
         """
         try:
             embeddings = np.load(filepath)
+            
+            # Check and convert data type for consistency
+            if embeddings.dtype != np.float32:
+                print(f"[INFO] Converting {filepath.name} from {embeddings.dtype} to float32")
+                embeddings = embeddings.astype(np.float32)
+            
             # Only print for first few files to avoid spam
             if hasattr(self, '_files_loaded'):
                 self._files_loaded += 1
@@ -92,7 +98,7 @@ class NPYEmbeddingMigrator:
                 print(f"[FOLDER] Loading files (showing first 10):")
             
             if self._files_loaded <= 10:
-                print(f"   {self._files_loaded:2d}. {filepath.name}: shape {embeddings.shape}")
+                print(f"   {self._files_loaded:2d}. {filepath.name}: shape {embeddings.shape}, dtype {embeddings.dtype}")
             elif self._files_loaded == 11:
                 print(f"   ... (continuing silently)")
             
@@ -334,6 +340,10 @@ class NPYEmbeddingMigrator:
         # Step 1: Analyze embeddings
         print("[STATS] Step 1/5: Analyzing embeddings...")
         id2index, combined_embeddings = self.analyze_embeddings(files)
+        # Sanity check to avoid mismatched mapping leading to bad fallbacks
+        if len(id2index) != combined_embeddings.shape[0]:
+            print(f"[ERROR] Mapping entries ({len(id2index):,}) != embeddings rows ({combined_embeddings.shape[0]:,})")
+            raise ValueError("id2index size mismatch with combined embeddings. Ensure inputs exclude combined files and are consistent.")
         
         # Step 2: Save mapping and embeddings
         print("[SAVE] Step 2/5: Saving files locally...")
@@ -420,22 +430,16 @@ class NPYEmbeddingMigrator:
             
             for idx in range(i, end_idx):
                 idx_str = str(idx)
-                if idx_str in id2index:
-                    # Parse "group/video/keyframe" format
-                    parts = id2index[idx_str].split('/')
-                    if len(parts) >= 3:
-                        group_num = int(parts[0])
-                        video_num = int(parts[1])
-                        keyframe_num = int(parts[2])
-                        timestamp = keyframe_num / default_fps  # Convert to seconds
-                    else:
-                        # Fallback values
-                        group_num, video_num, keyframe_num = 1, 1, idx
-                        timestamp = idx / default_fps
-                else:
-                    # Default values when mapping not available
-                    group_num, video_num, keyframe_num = 1, 1, idx
-                    timestamp = idx / default_fps
+                if idx_str not in id2index:
+                    raise ValueError(f"Missing id2index entry for id {idx_str}. Mapping and embeddings misaligned.")
+                # Parse "group/video/keyframe" format
+                parts = id2index[idx_str].split('/')
+                if len(parts) < 3:
+                    raise ValueError(f"Malformed id2index value for id {idx_str}: '{id2index[idx_str]}'")
+                group_num = int(parts[0])
+                video_num = int(parts[1])
+                keyframe_num = int(parts[2])
+                timestamp = keyframe_num / default_fps  # Convert to seconds
                 
                 batch_timestamps.append(timestamp)
                 batch_group_nums.append(group_num)
@@ -574,7 +578,7 @@ Examples:
             return
         
         # Get all .npy files from the specified folder
-        files = list(folder_path.glob("*.npy"))
+        files = [f for f in folder_path.glob("*.npy") if f.name != "combined_embeddings.npy"]
         
         if not files:
             print(f"[ERROR] No .npy files found in folder: {args.folder_path}")

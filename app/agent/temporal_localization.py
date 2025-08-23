@@ -41,17 +41,72 @@ class TemporalLocalizer:
     def _load_video_metadata(self, metadata_path: Path):
         """Load video metadata including duration, fps, etc."""
         try:
-            with open(metadata_path) as f:
-                data = json.load(f)
-                for video_info in data:
-                    # Create video key for metadata lookup
-                    if video_info['group_num'] < 21:
-                        video_key = f"L{str(video_info['group_num']):0>2s}/V{str(video_info['video_num']):0>3s}"
-                    else:
-                        video_key = f"L{str(video_info['group_num']):0>2s}/L{str(video_info['group_num']):0>2s}_V{str(video_info['video_num']):0>3s}"
-                    self.video_metadata[video_key] = TemporalMapping(**video_info)
+            # Check if metadata_path is a directory (folder) or a single file
+            if metadata_path.is_dir():
+                # Load all JSON files from the metadata folder
+                json_files = list(metadata_path.glob("*.json"))
+                print(f"Found {len(json_files)} metadata files in {metadata_path}")
+                
+                for json_file in json_files:
+                    try:
+                        with open(json_file, 'r', encoding='utf-8') as f:
+                            video_info = json.load(f)
+                            
+                        # Extract group_num and video_num from filename
+                        # Expected format: L21_V001.json
+                        filename = json_file.stem  # Gets filename without extension
+                        if '_V' in filename:
+                            group_part = filename.split('_V')[0]
+                            video_part = filename.split('_V')[1]
+                            
+                            # Extract numbers
+                            group_num = int(group_part[1:])  # Remove 'L' prefix
+                            video_num = int(video_part)
+                            
+                            # Add to video_info if not present
+                            if 'group_num' not in video_info:
+                                video_info['group_num'] = group_num
+                            if 'video_num' not in video_info:
+                                video_info['video_num'] = video_num
+                            
+                            # Create video key for metadata lookup
+                            if group_num < 21:
+                                video_key = f"L{str(group_num):0>2s}/V{str(video_num):0>3s}"
+                            else:
+                                video_key = f"L{str(group_num):0>2s}/L{str(group_num):0>2s}_V{str(video_num):0>3s}"
+                            
+                            # Create TemporalMapping object
+                            try:
+                                self.video_metadata[video_key] = TemporalMapping(**video_info)
+                            except Exception as mapping_error:
+                                print(f"Warning: Could not create TemporalMapping for {filename}: {mapping_error}")
+                                
+                    except Exception as file_error:
+                        print(f"Warning: Could not load metadata file {json_file}: {file_error}")
+                        continue
+                        
+            elif metadata_path.is_file():
+                # Load single metadata file (legacy support)
+                with open(metadata_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    for video_info in data:
+                        # Create video key for metadata lookup
+                        if video_info['group_num'] < 21:
+                            video_key = f"L{str(video_info['group_num']):0>2s}/V{str(video_info['video_num']):0>3s}"
+                        else:
+                            video_key = f"L{str(video_info['group_num']):0>2s}/L{str(video_info['group_num']):0>2s}_V{str(video_info['video_num']):0>3s}"
+                        self.video_metadata[video_key] = TemporalMapping(**video_info)
+            else:
+                print(f"Warning: Metadata path does not exist: {metadata_path}")
+                
+            print(f"Successfully loaded metadata for {len(self.video_metadata)} videos")
+            
         except Exception as e:
             print(f"Warning: Could not load video metadata: {e}")
+            print(f"Metadata path: {metadata_path}")
+            print(f"Path exists: {metadata_path.exists()}")
+            print(f"Is directory: {metadata_path.is_dir() if metadata_path.exists() else 'N/A'}")
+            print(f"Is file: {metadata_path.is_file() if metadata_path.exists() else 'N/A'}")
     
     def keyframe_to_timestamp(
         self, 
@@ -62,10 +117,10 @@ class TemporalLocalizer:
     ) -> float:
         """Convert keyframe number to timestamp in seconds"""
         # Create video key for metadata lookup
-        if group_num < 21:
-            video_key = f"L{str(group_num):0>2s}/V{str(video_num):0>3s}"
-        else:
-            video_key = f"L{str(group_num):0>2s}/L{str(group_num):0>2s}_V{str(video_num):0>3s}"
+        # if group_num < 21:
+        #     video_key = f"L{str(group_num):0>2s}/V{str(video_num):0>3s}"
+        # else:
+        video_key = f"L{str(group_num):0>2s}/L{str(group_num):0>2s}_V{str(video_num):0>3s}"
         
         if video_key in self.video_metadata:
             fps = fps or self.video_metadata[video_key].fps
@@ -127,10 +182,10 @@ class TemporalLocalizer:
         avg_confidence = sum(kf.confidence_score for kf in keyframes) / len(keyframes)
         
         # Create video ID for the moment
-        if first_kf.group_num < 21:
-            video_id=f"L{str(first_kf.group_num):0>2s}/V{str(first_kf.video_num):0>3s}"
-        else:
-            video_id=f"L{str(first_kf.group_num):0>2s}/L{str(first_kf.group_num):0>2s}_V{str(first_kf.video_num):0>3s}"
+        # if first_kf.group_num < 21:
+        #     video_id=f"L{str(first_kf.group_num):0>2s}/V{str(first_kf.video_num):0>3s}"
+        # else:
+        video_id=f"L{str(first_kf.group_num):0>2s}/L{str(first_kf.group_num):0>2s}_V{str(first_kf.video_num):0>3s}"
         
         # Debug: Check if video_num is corrupted
         if isinstance(first_kf.video_num, str) and '_V' in first_kf.video_num:

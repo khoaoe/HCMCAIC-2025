@@ -1,5 +1,6 @@
 import os
 import sys
+import numpy as np
 ROOT_DIR = os.path.abspath(
     os.path.join(
         os.path.dirname(__file__), '../'
@@ -58,6 +59,14 @@ class KeyframeQueryService:
         score_threshold: float | None = None,
         exclude_indices: list[int] | None = None
     ) -> list[KeyframeServiceReponse]:
+        
+        # Ensure embedding data type consistency
+        if isinstance(text_embedding, np.ndarray):
+            # Convert to float32 for consistency
+            text_embedding = text_embedding.astype(np.float32).tolist()
+        elif isinstance(text_embedding, list):
+            # Convert list to float32
+            text_embedding = [float(x) for x in text_embedding]
         
         search_request = MilvusSearchRequest(
             embedding=text_embedding,
@@ -250,7 +259,57 @@ class KeyframeQueryService:
             group_nums is not None and len(group_nums) > 0,
         ])
 
+        # If we got enough results or no filters applied, return
         if response or not filters_applied:
+            # If we have some results but fewer than requested and filters were applied,
+            # augment using a non-temporal fallback and post-filtering by metadata.
+            if filters_applied and 0 < len(response) < top_k:
+                try:
+                    fallback_request = MilvusSearchRequest(
+                        embedding=text_embedding,
+                        top_k=top_k * 10
+                    )
+                    fallback_results = await self.keyframe_vector_repo.search_by_embedding(fallback_request)
+
+                    sorted_results_fb = sorted(
+                        [r for r in fallback_results.results if score_threshold is None or r.distance > score_threshold],
+                        key=lambda r: r.distance,
+                        reverse=True,
+                    )
+
+                    ids_fb = [r.id_ for r in sorted_results_fb]
+                    keyframe_map_fb = {k.key: k for k in (await self._retrieve_keyframes(ids_fb))}
+
+                    fps = 25.0
+                    augmented: list[KeyframeServiceReponse] = response[:]
+                    for r in sorted_results_fb:
+                        if any(k.key == r.id_ for k in augmented):
+                            continue
+                        kf = keyframe_map_fb.get(r.id_)
+                        if not kf:
+                            continue
+                        if group_nums and kf.group_num not in group_nums:
+                            continue
+                        if video_nums and kf.video_num not in video_nums:
+                            continue
+                        if start_time is not None and end_time is not None:
+                            ts = kf.keyframe_num / fps
+                            if not (start_time <= ts <= end_time):
+                                continue
+                        augmented.append(
+                            KeyframeServiceReponse(
+                                key=kf.key,
+                                video_num=safe_convert_video_num(kf.video_num),
+                                group_num=kf.group_num,
+                                keyframe_num=kf.keyframe_num,
+                                confidence_score=r.distance,
+                            )
+                        )
+
+                    augmented.sort(key=lambda x: x.confidence_score, reverse=True)
+                    return augmented[:top_k]
+                except Exception:
+                    return response
             return response
 
         # Fallback: retrieve without temporal expression, then post-filter using Mongo metadata

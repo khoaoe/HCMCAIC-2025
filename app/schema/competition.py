@@ -168,12 +168,30 @@ class InteractiveLLMResponse(BaseModel):
 
 class TemporalMapping(BaseModel):
     """Maps keyframe numbers to temporal information"""
-    video_id: str
+    # Required fields for video identification
     group_num: int
     video_num: int
+    
+    # Optional fields that may be present in metadata
+    video_id: Optional[str] = None
     fps: float = Field(default=25.0, description="Frames per second")
-    total_frames: int = Field(..., description="Total frames in video")
-    duration: float = Field(..., description="Video duration in seconds")
+    total_frames: Optional[int] = None
+    duration: Optional[float] = None
+    
+    # Additional metadata fields from JSON files
+    author: Optional[str] = None
+    channel_id: Optional[str] = None
+    channel_url: Optional[str] = None
+    description: Optional[str] = None
+    keywords: Optional[List[str]] = None
+    length: Optional[int] = None  # Duration in seconds
+    publish_date: Optional[str] = None
+    thumbnail_url: Optional[str] = None
+    title: Optional[str] = None
+    watch_url: Optional[str] = None
+    
+    class Config:
+        extra = "allow"  # Allow additional fields not defined in the schema
 
 
 class MomentCandidate(BaseModel):

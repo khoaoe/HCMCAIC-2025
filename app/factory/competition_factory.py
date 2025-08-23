@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List
 
 from llama_index.core.llms import LLM
-from llama_index.llms.openai import OpenAI
+# from llama_index.llms.openai import OpenAI
 
 from agent.competition_agent import CompetitionAgent
 from controller.competition_controller import CompetitionController
@@ -21,6 +21,7 @@ from core.settings import MongoDBSettings, KeyFrameIndexMilvusSetting
 from factory.factory import ServiceFactory
 from models.keyframe import Keyframe
 from core.settings import AppSettings
+from core.dependencies import get_llm
 
 
 class CompetitionFactory:
@@ -37,7 +38,7 @@ class CompetitionFactory:
         
     def create_llm(
         self, 
-        model_name: str = "gpt-4o",
+        model_name: str = "gemini-2.5-flash-lite",
         temperature: float = 0.1,
         max_tokens: int = 2048
     ) -> LLM:
@@ -45,13 +46,20 @@ class CompetitionFactory:
         
         if self._llm is None:
             # Competition-optimized settings
-            self._llm = OpenAI(
-                model=model_name,
-                temperature=temperature,  # Low temperature for consistent results
-                max_tokens=max_tokens,
-                timeout=30.0,  # Reasonable timeout for competition
-                max_retries=3  # Retry failed requests
-            )
+            # self._llm = OpenAI(
+            #     model=model_name,
+            #     temperature=temperature,  # Low temperature for consistent results
+            #     max_tokens=max_tokens,
+            #     timeout=30.0,  # Reasonable timeout for competition
+            #     max_retries=3  # Retry failed requests
+            # )
+            self._llm = get_llm(
+                            model_name=model_name,
+                            temperature=temperature,
+                            max_tokens=max_tokens,
+                            timeout=30.0,
+                            max_retries=3
+            )       
         
         return self._llm
     
@@ -450,7 +458,7 @@ def validate_competition_setup(
     data_folder: str,
     objects_file: str,
     asr_file: str,
-    video_metadata_file: Optional[str] = None
+    video_metadata_folder: Optional[str] = None
 ) -> Dict[str, Any]:
     """Validate competition system setup and data availability"""
     
@@ -515,9 +523,9 @@ def validate_competition_setup(
             validation_result["data_stats"]["asr_available"] = False
     
     # Check video metadata file
-    if video_metadata_file:
-        if not os.path.exists(video_metadata_file):
-            validation_result["warnings"].append(f"Video metadata file not found: {video_metadata_file}")
+    if video_metadata_folder:
+        if not os.path.exists(video_metadata_folder):
+            validation_result["warnings"].append(f"Video metadata file not found: {video_metadata_folder}")
             validation_result["data_stats"]["metadata_available"] = False
         else:
             validation_result["data_stats"]["metadata_available"] = True

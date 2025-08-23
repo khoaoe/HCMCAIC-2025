@@ -7,6 +7,7 @@ import numpy as np
 from typing import List, Dict, Tuple, Optional
 import asyncio
 from dataclasses import dataclass
+import os
 
 from schema.response import KeyframeServiceReponse
 from schema.competition import MomentCandidate
@@ -240,11 +241,27 @@ class AdaptiveBidirectionalTemporalSearch:
         embeddings_cache = {}
         
         for kf in keyframes:
-            # For now, use placeholder embeddings
-            # In production, would extract from actual images
-            placeholder_embedding = np.random.randn(1024).astype(np.float32)
-            embeddings_cache[kf.key] = placeholder_embedding
+            try:
+                # Build image path
+                image_path = f"{data_folder}/L{str(kf.group_num):0>2s}/L{str(kf.group_num):0>2s}_V{str(kf.video_num):0>3s}/{str(kf.keyframe_num):0>3d}.jpg"
+                
+                # Extract real embedding from image
+                if os.path.exists(image_path):
+                    embedding = self.model_service.embed_image(image_path)
+                    embeddings_cache[kf.key] = embedding
+                else:
+                    print(f"Warning: Image not found for keyframe {kf.key}: {image_path}")
+                    # Fallback to zero embedding if image not found
+                    embedding = np.zeros(1024, dtype=np.float32)
+                    embeddings_cache[kf.key] = embedding
+                    
+            except Exception as e:
+                print(f"Error extracting embedding for keyframe {kf.key}: {e}")
+                # Fallback to zero embedding on error
+                embedding = np.zeros(1024, dtype=np.float32)
+                embeddings_cache[kf.key] = embedding
         
+        print(f"ABTS: Built embeddings cache with {len(embeddings_cache)} keyframes")
         return embeddings_cache
     
     def _cosine_similarity(self, a: np.ndarray, b: np.ndarray) -> float:

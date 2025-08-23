@@ -1,5 +1,5 @@
 """
-Advanced Multi-Modal Agent for HCMC AI Challenge 2025
+Multi-modal agent for HCMC AI Challenge 2025
 Implements state-of-the-art techniques for video moment retrieval and QA
 """
 
@@ -284,18 +284,146 @@ class MultiModalRetriever:
         try:
             response = await self.llm.acomplete(prompt)
             
-            # For now, return original order
-            # TODO: Parse LLM response and reorder based on scores
-            return moments
+            # Parse LLM response and reorder based on scores
+            reranked_moments = await self._parse_llm_reranking_response(response, moments)
+            return reranked_moments
             
         except Exception as e:
             print(f"Warning: LLM reranking failed: {e}")
             return moments
+    
+    async def _parse_llm_reranking_response(
+        self, 
+        response, 
+        moments: List[MomentCandidate]
+    ) -> List[MomentCandidate]:
+        """
+        Parse LLM reranking response and reorder moments accordingly
+        """
+        
+        try:
+            response_text = str(response).strip()
+            
+            # Try to extract ranking information from LLM response
+            # Look for patterns like "Candidate X is better than Candidate Y" or numbered rankings
+            
+            # Method 1: Look for explicit ranking numbers
+            import re
+            ranking_pattern = r'candidate\s*(\d+).*?(?:rank|score|better|best)'
+            matches = re.findall(ranking_pattern, response_text.lower())
+            
+            if matches:
+                # Extract candidate numbers and create ranking
+                ranked_indices = []
+                for match in matches:
+                    try:
+                        candidate_num = int(match) - 1  # Convert to 0-based index
+                        if 0 <= candidate_num < len(moments):
+                            ranked_indices.append(candidate_num)
+                    except ValueError:
+                        continue
+                
+                # Remove duplicates while preserving order
+                seen = set()
+                unique_ranked = []
+                for idx in ranked_indices:
+                    if idx not in seen:
+                        unique_ranked.append(idx)
+                        seen.add(idx)
+                
+                # Add any remaining moments that weren't explicitly ranked
+                for i in range(len(moments)):
+                    if i not in seen:
+                        unique_ranked.append(i)
+                
+                # Reorder moments based on LLM ranking
+                reranked_moments = [moments[i] for i in unique_ranked]
+                print(f"LLM Reranking: Reordered {len(reranked_moments)} moments based on LLM analysis")
+                return reranked_moments
+            
+            # Method 2: Look for confidence score adjustments
+            confidence_pattern = r'confidence.*?(\d+\.?\d*)'
+            confidence_matches = re.findall(confidence_pattern, response_text.lower())
+            
+            if confidence_matches and len(confidence_matches) >= len(moments):
+                # Apply confidence adjustments
+                adjusted_moments = []
+                for i, moment in enumerate(moments):
+                    if i < len(confidence_matches):
+                        try:
+                            new_confidence = float(confidence_matches[i])
+                            # Create new moment with adjusted confidence
+                            adjusted_moment = MomentCandidate(
+                                video_id=moment.video_id,
+                                group_num=moment.group_num,
+                                video_num=moment.video_num,
+                                start_time=moment.start_time,
+                                end_time=moment.end_time,
+                                confidence_score=new_confidence,
+                                evidence_keyframes=moment.evidence_keyframes,
+                                detected_objects=moment.detected_objects,
+                                asr_text=moment.asr_text
+                            )
+                            adjusted_moments.append(adjusted_moment)
+                        except ValueError:
+                            adjusted_moments.append(moment)
+                    else:
+                        adjusted_moments.append(moment)
+                
+                # Sort by adjusted confidence
+                adjusted_moments.sort(key=lambda x: x.confidence_score, reverse=True)
+                print(f"LLM Reranking: Adjusted confidence scores for {len(adjusted_moments)} moments")
+                return adjusted_moments
+            
+            # Method 3: Fallback - use semantic similarity with response
+            print("LLM Reranking: Using semantic similarity fallback")
+            return self._semantic_similarity_reranking(response_text, moments)
+            
+        except Exception as e:
+            print(f"Error parsing LLM reranking response: {e}")
+            return moments
+    
+    def _semantic_similarity_reranking(
+        self, 
+        response_text: str, 
+        moments: List[MomentCandidate]
+    ) -> List[MomentCandidate]:
+        """
+        Fallback reranking based on semantic similarity with LLM response
+        """
+        
+        try:
+            # Extract key terms from LLM response
+            response_terms = set(response_text.lower().split())
+            
+            # Calculate similarity scores for each moment
+            moment_scores = []
+            for moment in moments:
+                # Combine moment information into text
+                moment_text = f"{moment.video_id} {' '.join(moment.detected_objects or [])} {moment.asr_text or ''}"
+                moment_terms = set(moment_text.lower().split())
+                
+                # Calculate Jaccard similarity
+                intersection = len(response_terms.intersection(moment_terms))
+                union = len(response_terms.union(moment_terms))
+                similarity = intersection / union if union > 0 else 0
+                
+                moment_scores.append((similarity, moment))
+            
+            # Sort by similarity score
+            moment_scores.sort(key=lambda x: x[0], reverse=True)
+            reranked_moments = [moment for _, moment in moment_scores]
+            
+            return reranked_moments
+            
+        except Exception as e:
+            print(f"Error in semantic similarity reranking: {e}")
+            return moments
 
 
-class AdvancedMultiModalAgent:
+class MultiModalAgent:
     """
-    Advanced agent that combines all improvements for optimal competition performance
+    Multi-modal agent that combines all improvements for optimal competition performance
     """
     
     def __init__(
@@ -528,7 +656,7 @@ class AdvancedMultiModalAgent:
         feedback: Dict[str, Any],
         previous_results: List[MomentCandidate]
     ) -> List[MomentCandidate]:
-        """Advanced feedback integration for interactive tracks"""
+        """Feedback integration for interactive tracks"""
         
         # Store feedback in memory
         if session_id not in self.interaction_memory:

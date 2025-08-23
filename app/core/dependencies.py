@@ -34,12 +34,16 @@ load_dotenv()
 
 
 @lru_cache
-def get_llm() -> LLM:
+def get_llm(model_name: str = "gemini-2.5-flash-lite", temperature: float = 0.0, max_tokens: int = 1000, timeout: float = 30.0, max_retries: int = 3) -> LLM:
     try:
         print("🤖 Getting LLM for Agent...") 
         return GoogleGenAI(
-            'gemini-2.5-flash-lite',
-            api_key=os.getenv('GEMINI_API_KEY')
+            model_name,
+            api_key=os.getenv('GEMINI_API_KEY'),
+            temperature=temperature,
+            max_tokens=max_tokens,
+            timeout=timeout,
+            max_retries=max_retries
         )
     except Exception as e:
         logger.error(f"Failed to get LLM: {str(e)}")

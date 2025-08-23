@@ -239,13 +239,19 @@ class SuperGlobalReranker:
                 )
                 
                 if os.path.exists(image_path):
-                    # For now, use a placeholder embedding
-                    # In production, would extract visual features from image
-                    placeholder_embedding = np.random.randn(1024).astype(np.float32)  # CLIP dimension
-                    embeddings.append(placeholder_embedding)
-                    self.embedding_cache[cache_key] = placeholder_embedding
+                    # Extract real embedding from image using model service
+                    try:
+                        embedding = self.model_service.embed_image(image_path)
+                        embeddings.append(embedding)
+                        self.embedding_cache[cache_key] = embedding
+                    except Exception as e:
+                        print(f"Error extracting embedding for {image_path}: {e}")
+                        # Fallback to zero embedding on error
+                        zero_embedding = np.zeros(1024, dtype=np.float32)
+                        embeddings.append(zero_embedding)
+                        self.embedding_cache[cache_key] = zero_embedding
                 else:
-                    # Fallback to zero embedding
+                    # Fallback to zero embedding if image not found
                     zero_embedding = np.zeros(1024, dtype=np.float32)
                     embeddings.append(zero_embedding)
         

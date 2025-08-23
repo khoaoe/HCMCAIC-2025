@@ -116,43 +116,43 @@ class QueryController:
         model: KeyframeServiceReponse
     ) -> tuple[str, float]:
         # keyframe path structure from L21 -> L30: <DATA_FOLDER>/Lxx/Lxx_Vxxx/<frame>.jpg
-        if model.group_num < 21:
-            return os.path.join(
-                self.data_folder,
-                f"L{str(model.group_num):0>2s}",
-                f"V{str(model.video_num):0>3s}",
-                f"{str(model.keyframe_num):0>8s}.webp",
-            ), model.confidence_score
-        else:
-            # Support nested layouts for L21-L30:
-            # - Nested: <DATA_FOLDER>/Lxx/Lxx_Vxxx/<frame>.jpg
-            base_dir = os.path.join(
-                self.data_folder, 
-                f"L{str(model.group_num):0>2s}", 
-                f"L{str(model.group_num):0>2s}_V{str(model.video_num):0>3s}"
-            )
+        # if model.group_num < 21:
+        #     return os.path.join(
+        #         self.data_folder,
+        #         f"L{str(model.group_num):0>2s}",
+        #         f"V{str(model.video_num):0>3s}",
+        #         f"{str(model.keyframe_num):0>8s}.webp",
+        #     ), model.confidence_score
+        # else:
+        # Support nested layouts for L21-L30:
+        # - Nested: <DATA_FOLDER>/Lxx/Lxx_Vxxx/<frame>.jpg
+        base_dir = os.path.join(
+            self.data_folder, 
+            f"L{str(model.group_num):0>2s}", 
+            f"L{str(model.group_num):0>2s}_V{str(model.video_num):0>3s}"
+        )
 
-            # Try different filename patterns, prioritizing shorter formats
-            # Most common: 197.jpg, 068.jpg (no padding)
-            candidates = [
-                # f"{str(model.keyframe_num)}.jpg",           # 197.jpg
-                f"{str(model.keyframe_num):0>3s}.jpg",       # 197.jpg (3-digit padding)
-                # f"{str(model.keyframe_num):0>4s}.jpg",       # 0197.jpg (4-digit padding)
-                # f"{str(model.keyframe_num):0>6s}.jpg",       # 000197.jpg (6-digit padding)
-                # f"{str(model.keyframe_num):0>8s}.jpg",       # 00000197.jpg (8-digit padding)
-            ]
+        # Try different filename patterns, prioritizing shorter formats
+        # Most common: 197.jpg, 068.jpg (no padding)
+        candidates = [
+            # f"{str(model.keyframe_num)}.jpg",           # 197.jpg
+            f"{str(model.keyframe_num):0>3s}.jpg",       # 197.jpg (3-digit padding)
+            # f"{str(model.keyframe_num):0>4s}.jpg",       # 0197.jpg (4-digit padding)
+            # f"{str(model.keyframe_num):0>6s}.jpg",       # 000197.jpg (6-digit padding)
+            # f"{str(model.keyframe_num):0>8s}.jpg",       # 00000197.jpg (8-digit padding)
+        ]
 
-            for filename in candidates:
-                full_path = os.path.join(base_dir, filename)
-                try:
-                    if os.path.exists(full_path):
-                        return full_path, model.confidence_score
-                except Exception:
-                    # If existence check fails, continue to next candidate
-                    pass
+        for filename in candidates:
+            full_path = os.path.join(base_dir, filename)
+            try:
+                if os.path.exists(full_path):
+                    return full_path, model.confidence_score
+            except Exception:
+                # If existence check fails, continue to next candidate
+                pass
 
-            # Fallback to no padding (most common format)
-            return os.path.join(base_dir, f"{str(model.keyframe_num)}.jpg"), model.confidence_score
+        # Fallback to no padding (most common format)
+        return os.path.join(base_dir, f"{str(model.keyframe_num)}.jpg"), model.confidence_score
         
     async def search_text(
         self, 

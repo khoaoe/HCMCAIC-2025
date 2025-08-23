@@ -521,7 +521,7 @@ if st.button("🚀 Search", use_container_width=True):
                                 kf_num = int(kf_num)
                                 
                                 # Fix the path construction to avoid f-string backslash issue
-                                keyframes_path = app_settings.KEYFRAMES_PATH.replace('\\', '/')
+                                keyframes_path = app_settings.KEYFRAMES_FOLDER.replace('\\', '/')
                                 path = f"{keyframes_path}/L{group_num:02d}/L{group_num:02d}_V{video_num:03d}/{kf_num:03d}.jpg"
                                 
                             except Exception as e:
@@ -550,7 +550,7 @@ if st.button("🚀 Search", use_container_width=True):
                         st.error(f"❌ GRAB Search Error: {response.status_code} - {response.text}")
                     
                     # Skip the normal POST request processing for GRAB search
-                    st.stop()
+                    # st.stop()
                 
                 # Include Groups & Videos
                 elif search_mode == "Include Groups & Videos":

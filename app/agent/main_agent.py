@@ -57,7 +57,47 @@ def apply_object_filter(
         return filtered_keyframes
 
 
-
+def deduplicate_keyframes(keyframes: List[KeyframeServiceReponse]) -> List[KeyframeServiceReponse]:
+    """Remove duplicate keyframes and fuse scores with multi-query fusion"""
+    
+    keyframe_map = {}
+    keyframe_sources = {}  # Track which query variations found each keyframe
+    
+    for kf in keyframes:
+        key = f"{kf.group_num}_{kf.video_num}_{kf.keyframe_num}"
+        
+        if key in keyframe_map:
+            # Fuse scores using weighted combination
+            existing_kf = keyframe_map[key]
+            
+            # Count how many different query variations found this keyframe
+            source = getattr(kf, 'search_source', 'unknown')
+            if key not in keyframe_sources:
+                keyframe_sources[key] = set()
+            keyframe_sources[key].add(source)
+            
+            # Boost score if found by multiple variations (indicates high relevance)
+            variation_bonus = 0.1 * (len(keyframe_sources[key]) - 1)
+            
+            # Take the maximum score plus variation bonus
+            if kf.confidence_score > existing_kf.confidence_score:
+                kf.confidence_score = min(kf.confidence_score + variation_bonus, 1.0)
+                keyframe_map[key] = kf
+            else:
+                existing_kf.confidence_score = min(existing_kf.confidence_score + variation_bonus, 1.0)
+                keyframe_map[key] = existing_kf
+        else:
+            keyframe_map[key] = kf
+            source = getattr(kf, 'search_source', 'unknown')
+            keyframe_sources[key] = {source}
+    
+    # Sort by fused confidence score
+    unique_keyframes = list(keyframe_map.values())
+    unique_keyframes.sort(key=lambda x: x.confidence_score, reverse=True)
+    
+    print(f"Deduplication with fusion: {len(keyframes)} → {len(unique_keyframes)} keyframes")
+    
+    return unique_keyframes
 
 
 class KeyframeSearchAgent:
@@ -89,37 +129,59 @@ class KeyframeSearchAgent:
         Main agent flow:
         1. Extract visual/event elements and rephrase query
         2. Search for top-K keyframes using rephrased query
-        3. Score videos by averaging keyframe scores, select best video
-        4. Optionally apply COCO object filtering
-        5. Generate final answer with visual context
+        3. Process ALL keyframes from ALL videos (CORPUS-LEVEL SEARCH)
+        4. Apply deduplication and temporal clustering
+        5. Optionally apply COCO object filtering
+        6. Generate final answer with visual context
         """
 
         agent_response = await self.query_extractor.extract_visual_events(user_query)
         search_query = agent_response.refined_query
         suggested_objects = agent_response.list_of_objects
-
+        query_variations = agent_response.query_variations or [search_query]
 
         print(f"{search_query=}")
         print(f"{suggested_objects=}")
+        print(f"Query variations: {query_variations}")
 
-        embedding = self.model_service.embedding(search_query).tolist()[0]
-        top_k_keyframes = await self.keyframe_service.search_by_text(
-            text_embedding=embedding,
-            top_k=self.top_k,
-            score_threshold=0.1
-        )
+        # Stage 1: Multi-query retrieval with semantic variations for robust search
+        all_keyframes = []
+        
+        for i, variation in enumerate(query_variations):
+            print(f"Searching with variation {i+1}: {variation}")
+            
+            embedding = self.model_service.embedding(variation).tolist()[0]
+            keyframes = await self.keyframe_service.search_by_text(
+                text_embedding=embedding,
+                top_k=self.top_k * 2,  # Get more per variation for better coverage
+                score_threshold=0.1
+            )
+            
+            # Add source information to track which variation found each keyframe
+            for kf in keyframes:
+                if not hasattr(kf, 'search_source'):
+                    kf.search_source = f"variation_{i+1}"
+            
+            all_keyframes.extend(keyframes)
+            print(f"Variation {i+1} found {len(keyframes)} keyframes")
+        
+        print(f"Total keyframes from all variations: {len(all_keyframes)}")
+        top_k_keyframes = all_keyframes
 
-
-        video_scores = self.query_extractor.calculate_video_scores(top_k_keyframes)
-        _, best_video_keyframes = video_scores[0]
-
-
-
-        final_keyframes = best_video_keyframes
+        # Stage 2: FIXED - Process ALL keyframes from ALL videos (CORPUS-LEVEL SEARCH)
+        # Remove the flawed "best video only" logic
+        print(f"Retrieved {len(top_k_keyframes)} keyframes from all videos")
+        
+        # Stage 3: Deduplication and sorting
+        unique_keyframes = deduplicate_keyframes(top_k_keyframes)
+        print(f"After deduplication: {len(unique_keyframes)} unique keyframes")
+        
+        # Stage 4: Apply object filtering if suggested
+        final_keyframes = unique_keyframes
         print(f"Length of keyframes before objects {len(final_keyframes)}")
         if suggested_objects:
             filtered_keyframes = apply_object_filter(
-                keyframes=best_video_keyframes,
+                keyframes=unique_keyframes,
                 objects_data=self.objects_data,
                 target_objects=suggested_objects
             )
@@ -127,10 +189,31 @@ class KeyframeSearchAgent:
                 final_keyframes = filtered_keyframes
         print(f"Length of keyframes after objects {len(final_keyframes)}")
         
+        # Stage 5: Select top results for answer generation
+        # Take top keyframes across all videos, not just one video
+        final_keyframes = final_keyframes[:self.top_k]
         
-        smallest_kf = min(final_keyframes, key=lambda x: int(x.keyframe_num))
-        max_kf = max(final_keyframes, key=lambda x: int(x.keyframe_num))
+        if not final_keyframes:
+            return "Không tìm thấy kết quả phù hợp với truy vấn của bạn."
+        
+        # Stage 6: Extract temporal information from the best keyframes
+        # Handle multiple videos properly
+        video_groups = {}
+        for kf in final_keyframes:
+            video_key = f"{kf.group_num}_{kf.video_num}"
+            if video_key not in video_groups:
+                video_groups[video_key] = []
+            video_groups[video_key].append(kf)
+        
+        # Find the video with the highest average confidence score
+        best_video_key = max(video_groups.keys(), 
+                           key=lambda k: sum(kf.confidence_score for kf in video_groups[k]) / len(video_groups[k]))
+        best_video_keyframes = video_groups[best_video_key]
+        
+        smallest_kf = min(best_video_keyframes, key=lambda x: int(x.keyframe_num))
+        max_kf = max(best_video_keyframes, key=lambda x: int(x.keyframe_num))
 
+        print(f"Best video keyframes: {len(best_video_keyframes)} from video {best_video_key}")
         print(f"{smallest_kf=}")
         print(f"{max_kf=}")
 
@@ -140,6 +223,7 @@ class KeyframeSearchAgent:
         print(f"{group_num}")
         print(f"{video_num}")
         print(f"L{str(group_num):0>2s}/L{str(group_num):0>2s}_V{str(video_num):0>3s}")
+        
         # Extract ASR text for the temporal segment
         matching_asr = None
         for entry in self.asr_data.values():
@@ -163,7 +247,12 @@ class KeyframeSearchAgent:
             asr_text = " ".join(asr_text_segments)
         print(f"ASR text for segment: {asr_text[:200]}...")
 
-
+        # Stage 7: Generate answer with all relevant keyframes from all videos
+        # Include information about which videos were found
+        video_info = f"Find results from {len(video_groups)} videos. "
+        if len(video_groups) > 1:
+            video_info += f"Main video: {best_video_key}, other videos: {', '.join([k for k in video_groups.keys() if k != best_video_key])}"
+        
         answer = await self.answer_generator.generate_answer(
             original_query=user_query,
             final_keyframes=final_keyframes,

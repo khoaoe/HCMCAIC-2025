@@ -3,9 +3,7 @@ Temporal Search Service
 Integrates GRAB framework techniques for superior temporal search performance
 """
 
-import numpy as np
-from typing import List, Dict, Tuple, Optional, Any
-import asyncio
+from typing import List, Dict, Optional, Any
 import sys
 import os
 
@@ -205,6 +203,9 @@ class TemporalSearchService:
             return []
         
         print(f"Initial retrieval: {len(initial_keyframes)} keyframes")
+
+        # Exact-id dedup before any GRAB stage (keep highest score per key)
+        initial_keyframes = self._deduplicate_by_key_keep_best(initial_keyframes)
         
         # Stage 2: Apply GRAB optimizations (simplified for now)
         optimized_keyframes = await self._apply_grab_optimizations(
@@ -222,6 +223,27 @@ class TemporalSearchService:
         print(f"Temporal search complete: {len(moments)} moments found")
         
         return moments[:top_k]
+
+    def _deduplicate_by_key_keep_best(
+        self,
+        keyframes: List[KeyframeServiceReponse]
+    ) -> List[KeyframeServiceReponse]:
+        """
+        Remove duplicates by unique keyframe id, preserving the one with the
+        highest confidence_score. Stable order by descending score.
+        """
+        if not keyframes:
+            return keyframes
+
+        best_by_key: dict[int, KeyframeServiceReponse] = {}
+        for kf in keyframes:
+            existing = best_by_key.get(kf.key)
+            if existing is None or kf.confidence_score > existing.confidence_score:
+                best_by_key[kf.key] = kf
+
+        deduped = list(best_by_key.values())
+        deduped.sort(key=lambda x: x.confidence_score, reverse=True)
+        return deduped
     
     async def _apply_grab_optimizations(
         self,
@@ -232,15 +254,19 @@ class TemporalSearchService:
         Apply GRAB framework optimizations (simplified implementation)
         """
         
-        optimized_keyframes = keyframes.copy()
+        # Safety: ensure no exact-id duplicates enter optimization
+        optimized_keyframes = self._deduplicate_by_key_keep_best(keyframes)
         
         # Stage 1: Shot-based filtering (simplified)
         if self.optimization_config["enable_shot_detection"]:
             optimized_keyframes = await self._apply_shot_filtering(optimized_keyframes)
         
-        # Stage 2: Deduplication (simplified)
+        # Stage 2: Deduplication (temporal/perceptual)
         if self.optimization_config["enable_deduplication"]:
             optimized_keyframes = await self._apply_deduplication(optimized_keyframes)
+
+        # Safety after dedup stage: re-ensure uniqueness by key
+        optimized_keyframes = self._deduplicate_by_key_keep_best(optimized_keyframes)
         
         # Stage 3: SuperGlobal reranking (simplified)
         if self.optimization_config["enable_superglobal_reranking"]:

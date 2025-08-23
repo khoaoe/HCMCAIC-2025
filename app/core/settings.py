@@ -46,14 +46,16 @@ class AppSettings(BaseSettings):
     )
     # model
     MODEL_NAME: str = "ViT-B-32"
+    # PRETAINED: bool = True
+    # PRETRAINED_NAME: str = "laion2b_s34b_b79k"
     # data folder
     DATA_FOLDER: str  = str(REPO_ROOT / 'resources' / 'keyframes')
-    KEYFRAMES_PATH: str = str(REPO_ROOT / 'resources' / 'keyframes')
+    KEYFRAMES_FOLDER: str = str(REPO_ROOT / 'resources' / 'keyframes')
     ID2INDEX_PATH: str = str(REPO_ROOT / 'resources' / 'keyframes' / 'id2index.json')
-    FRAME2OBJECT: str = str(REPO_ROOT / 'resources' / 'detections.json')
-    ASR_FILE: str = str(REPO_ROOT / 'resources' / 'asr_proc.json')
-    OBJECTS_FILE: str = str(REPO_ROOT / 'resources' / 'objects.json')
-    VIDEO_METADATA_FILE: str = str(REPO_ROOT / 'resources' / 'video_metadata.json')
+    # FRAME2OBJECT: str = str(REPO_ROOT / 'resources' / 'detections.json')
+    # ASR_FILE: str = str(REPO_ROOT / 'resources' / 'asr_proc.json')
+    OBJECTS_FOLDER: str = str(REPO_ROOT / 'resources' / 'objects')
+    VIDEO_METADATA_FOLDER: str = str(REPO_ROOT / 'resources' / 'metadata')
     OPTIMIZATION_PROFILE: str = 'balanced'
 
 

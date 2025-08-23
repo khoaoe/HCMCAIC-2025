@@ -15,32 +15,26 @@ A FastAPI-based AI application powered by Milvus for vector search, MongoDB for 
 
 
 ### 🔧 Local Development
-1. Clone the repo and start all services:
-```bash
-git clone https://github.com/yourusername/aio-aic.git
-cd aio-aic
-```
-
-2. Install uv and setup env
+1. Install uv and setup env
 ```bash
 pip install uv
 uv init --python=3.10
 uv add aiofiles beanie dotenv fastapi[standard] httpx ipykernel motor nicegui numpy open-clip-torch pydantic-settings pymilvus streamlit torch typing-extensions usearch uvicorn
 ```
 
-3. Activate .venv
+2. Activate .venv
 ```bash
 source .venv/bin/activate
 ```
 
 
-4. Run docker compose
+3. Run docker compose
 ```bash
 docker compose up -d
 ```
 
 
-5. Data Migration 
+4. Data Migration 
 ```bash
 # for .npy embeddings files 
 python migration/npy_embedding_migration.py --folder_path resources\embeddings
@@ -51,7 +45,7 @@ python migration/keyframe_migration.py --file_path resources\keyframes\id2index.
 ```
 
 
-6. Set up .env file
+5. Set up .env file
 
 Create .env file
 

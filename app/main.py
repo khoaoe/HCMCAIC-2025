@@ -57,7 +57,7 @@ async def lifespan(app: FastAPI):
             data_folder=getattr(settings, 'DATA_FOLDER', '/data/keyframes'),
             objects_file=getattr(settings, 'OBJECTS_FILE', '/data/objects.json'),
             asr_file=getattr(settings, 'ASR_FILE', '/data/asr.json'),
-            video_metadata_file=getattr(settings, 'VIDEO_METADATA_FILE', None)
+            video_metadata_folder=getattr(settings, 'VIDEO_METADATA_FOLDER', None)
         )
         
         if not validation_result["valid"]:
@@ -86,7 +86,7 @@ async def lifespan(app: FastAPI):
         
         competition_system = factory.create_full_competition_system(
             data_folder=getattr(settings, 'DATA_FOLDER', str(REPO_ROOT / 'resources' / 'keyframes')),
-            video_metadata_path=getattr(settings, 'VIDEO_METADATA_FILE', None),
+            video_metadata_path=getattr(settings, 'VIDEO_METADATA_FOLDER', None),
             objects_file_path=getattr(settings, 'OBJECTS_FILE', '/data/objects.json'),
             asr_file_path=getattr(settings, 'ASR_FILE', '/data/asr.json'),
             optimization_profile=getattr(settings, 'OPTIMIZATION_PROFILE', 'balanced')

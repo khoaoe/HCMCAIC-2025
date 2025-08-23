@@ -595,7 +595,7 @@ class EnhancedCompetitionAgent:
                 # Add object detection context
                 objects = []
                 for kf_num in moment.evidence_keyframes:
-                    keyframe_key = f"L{moment.group_num:02d}/L{moment.group_num:02d}_V{str(safe_convert_video_num(moment.video_num)):03d}/{kf_num:03d}.jpg"
+                    keyframe_key = f"L{moment.group_num:02d}/L{moment.group_num:02d}_V{safe_convert_video_num(moment.video_num):03d}/{kf_num:03d}.jpg"
                     kf_objects = self.objects_data.get(keyframe_key, [])
                     objects.extend(kf_objects)
                 moment.detected_objects = list(set(objects))
@@ -756,7 +756,7 @@ class EnhancedCompetitionAgent:
             end_time = center_time + 0.5
             
             return KISResponse(
-                video_id=f"L{best_match.group_num:02d}/L{best_match.group_num:02d}_V{str(safe_convert_video_num(best_match.video_num)):03d}",
+                video_id=f"L{best_match.group_num:02d}/L{best_match.group_num:02d}_V{safe_convert_video_num(best_match.video_num):03d}",
                 start_time=start_time,
                 end_time=end_time,
                 match_confidence=best_match.confidence_score
@@ -798,7 +798,7 @@ class EnhancedCompetitionAgent:
             )
             
             return KISResponse(
-                video_id=f"L{best_keyframe.group_num:02d}/L{best_keyframe.group_num:02d}_V{str(safe_convert_video_num(best_keyframe.video_num)):03d}",
+                video_id=f"L{best_keyframe.group_num:02d}/L{best_keyframe.group_num:02d}_V{safe_convert_video_num(best_keyframe.video_num):03d}",
                 start_time=max(0, center_time - 0.5),
                 end_time=center_time + 0.5,
                 match_confidence=similarity_score
@@ -864,7 +864,7 @@ class EnhancedCompetitionAgent:
                 "query": combined_query,
                 "hints_used": len(session["all_hints"]),
                 "best_match": {
-                    "video_id": f"L{best_keyframe.group_num:02d}/L{best_keyframe.group_num:02d}_V{str(safe_convert_video_num(best_keyframe.video_num)):03d}",
+                    "video_id": f"L{best_keyframe.group_num:02d}/L{best_keyframe.group_num:02d}_V{safe_convert_video_num(best_keyframe.video_num):03d}",
                     "timestamp": center_time,
                     "confidence": best_keyframe.confidence_score
                 }
@@ -873,7 +873,7 @@ class EnhancedCompetitionAgent:
             session["confidence_progression"].append(best_keyframe.confidence_score)
             
             return KISResponse(
-                video_id=f"L{best_keyframe.group_num:02d}/L{best_keyframe.group_num:02d}_V{str(safe_convert_video_num(best_keyframe.video_num)):03d}",
+                video_id=f"L{best_keyframe.group_num:02d}/L{best_keyframe.group_num:02d}_V{safe_convert_video_num(best_keyframe.video_num):03d}",
                 start_time=max(0, center_time - 1.0),
                 end_time=center_time + 1.0,
                 match_confidence=best_keyframe.confidence_score
@@ -893,7 +893,7 @@ class EnhancedCompetitionAgent:
         
         keyframe_map = {}
         for kf in keyframes:
-            key = f"L{kf.group_num:02d}/L{kf.group_num:02d}_V{str(safe_convert_video_num(kf.video_num)):03d}/{kf.keyframe_num:08d}.jpg"
+            key = f"L{kf.group_num:02d}/L{kf.group_num:02d}_V{safe_convert_video_num(kf.video_num):03d}/{kf.keyframe_num:03d}.jpg"
             
             if key in keyframe_map:
                 # Use weighted average for score fusion
@@ -1043,13 +1043,13 @@ class EnhancedCompetitionAgent:
             )
             
             # Get objects for this keyframe
-            keyframe_key = f"L{kf.group_num:02d}/L{kf.group_num:02d}_V{str(safe_convert_video_num(kf.video_num)):03d}/{kf.keyframe_num:03d}.jgp"
+            keyframe_key = f"L{kf.group_num:02d}/L{kf.group_num:02d}_V{safe_convert_video_num(kf.video_num):03d}/{kf.keyframe_num:03d}.jpg"
             objects = self.objects_data.get(keyframe_key, [])
             
             # Image path
             image_path = os.path.join(
                 self.data_folder,
-                f"L{kf.group_num:02d}/L{kf.group_num:02d}_V{str(safe_convert_video_num(kf.video_num)):03d}/{kf.keyframe_num:03d}.jpg"
+                f"L{kf.group_num:02d}/L{kf.group_num:02d}_V{safe_convert_video_num(kf.video_num):03d}/{kf.keyframe_num:03d}.jpg"
             )
             
             visual_context.append({
@@ -1207,6 +1207,45 @@ class EnhancedCompetitionAgent:
         
         base_metrics.update(enhanced_metrics)
         return base_metrics
+
+    async def vcmr_automatic(
+        self, 
+        request: VCMRAutomaticRequest
+    ) -> VCMRAutomaticResponse:
+        """VCMR automatic - alias for enhanced_vcmr_automatic for compatibility"""
+        return await self.enhanced_vcmr_automatic(request)
+
+    async def video_qa(
+        self, 
+        request: VideoQARequest
+    ) -> VideoQAResponse:
+        """Video QA processing"""
+        # Delegate to competition task processor
+        return await self.task_processor.process_video_qa(request)
+
+    async def kis_textual(
+        self, 
+        request: KISTextualRequest
+    ) -> KISResponse:
+        """KIS Textual processing"""
+        # Delegate to competition task processor
+        return await self.task_processor.process_kis_textual(request)
+
+    async def kis_visual(
+        self, 
+        request: KISVisualRequest
+    ) -> KISResponse:
+        """KIS Visual processing"""
+        # Delegate to competition task processor
+        return await self.task_processor.process_kis_visual(request)
+
+    async def kis_progressive(
+        self, 
+        request: KISProgressiveRequest
+    ) -> KISResponse:
+        """KIS Progressive processing"""
+        # Delegate to competition task processor
+        return await self.task_processor.process_kis_progressive(request)
 
 
 # Export the  agent as the main competition agent
