@@ -47,7 +47,7 @@ class AppSettings(BaseSettings):
     # model configuration
     MODEL_NAME: str = "ViT-B-32"
     USE_PRETRAINED: bool = True  # Whether to use pretrained weights 
-    PRETRAINED_WEIGHTS: str = "laion2b_s34b_b79k"  #  pretrained weights (only used if USE_PRETRAINED=True)
+    PRETRAINED_WEIGHTS: str = "openai"  #  pretrained weights (only used if USE_PRETRAINED=True)
     # data folder
     DATA_FOLDER: str  = str(REPO_ROOT / 'resources' / 'keyframes')
     KEYFRAMES_FOLDER: str = str(REPO_ROOT / 'resources' / 'keyframes')

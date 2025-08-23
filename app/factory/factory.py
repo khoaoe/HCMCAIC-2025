@@ -91,15 +91,27 @@ class ServiceFactory:
         try:
             if use_pretrained:
                 logger.info(f"Initializing model: {model_name} with pretrained weights: {pretrained_weights}")
-                model, _, preprocess = open_clip.create_model_and_transforms(
-                    model_name, 
-                    pretrained=pretrained_weights
-                )
+                
+                # Try with force_quick_gelu first
+                try:
+                    model, _, preprocess = open_clip.create_model_and_transforms(
+                        model_name, 
+                        pretrained=pretrained_weights,
+                        force_quick_gelu=True  # Fix QuickGELU mismatch warning
+                    )
+                except Exception as quick_gelu_error:
+                    logger.warning(f"QuickGELU force failed, trying without: {quick_gelu_error}")
+                    # Fallback: try without force_quick_gelu
+                    model, _, preprocess = open_clip.create_model_and_transforms(
+                        model_name, 
+                        pretrained=pretrained_weights
+                    )
             else:
                 logger.info(f"Initializing model: {model_name} without pretrained weights")
                 model, _, preprocess = open_clip.create_model_and_transforms(
                     model_name, 
-                    pretrained=None
+                    pretrained=None,
+                    force_quick_gelu=True  # Fix QuickGELU mismatch warning
                 )
             
             tokenizer = open_clip.get_tokenizer(model_name)
