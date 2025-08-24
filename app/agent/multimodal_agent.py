@@ -24,7 +24,7 @@ from utils.video_utils import safe_convert_video_num
 
 
 class QueryUnderstandingModule:
-    """Advanced query understanding with entity extraction and temporal parsing"""
+    """query understanding with entity extraction and temporal parsing"""
     
     def __init__(self, llm: LLM):
         self.llm = llm
@@ -80,7 +80,7 @@ class QueryUnderstandingModule:
 
 
 class MultiModalRetriever:
-    """Advanced retrieval with cross-modal fusion and reranking"""
+    """retrieval with cross-modal fusion and reranking"""
     
     def __init__(
         self,
@@ -108,7 +108,7 @@ class MultiModalRetriever:
         fusion_strategy: str = "late_fusion"
     ) -> List[MomentCandidate]:
         """
-        Advanced multi-modal retrieval with fusion and reranking
+        multi-modal retrieval with fusion and reranking
         
         Args:
             query: Search query
@@ -432,7 +432,7 @@ class MultiModalAgent:
         self.temporal_localizer = TemporalLocalizer(video_metadata_path)
         self.asr_aligner = ASRTemporalAligner(asr_data)
         
-        # Initialize advanced modules
+        # Initialize modules
         self.query_understanding = QueryUnderstandingModule(llm)
         self.multimodal_retriever = MultiModalRetriever(
             llm, keyframe_service, model_service, self.temporal_localizer,
@@ -442,14 +442,14 @@ class MultiModalAgent:
         # Feedback memory for interactive sessions
         self.interaction_memory: Dict[str, List[Dict[str, Any]]] = {}
     
-    async def advanced_vcmr(
+    async def vcmr(
         self,
         query: str,
         top_k: int = 100,
         corpus_wide: bool = True
     ) -> List[MomentCandidate]:
         """
-        Advanced VCMR with query understanding and multi-modal fusion
+        VCMR with query understanding and multi-modal fusion
         """
         
         # Stage 1: Deep query understanding
@@ -471,7 +471,7 @@ class MultiModalAgent:
         
         return validated_moments
     
-    async def advanced_video_qa(
+    async def video_qa(
         self,
         video_id: str,
         question: str,
@@ -479,7 +479,7 @@ class MultiModalAgent:
         context: Optional[Dict[str, Any]] = None
     ) -> Tuple[str, List[Dict[str, Any]], float]:
         """
-        Advanced Video QA with visual reasoning and evidence tracking
+        Video QA with visual reasoning and evidence tracking
         
         Returns:
             (answer, evidence_list, confidence)

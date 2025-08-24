@@ -6,6 +6,8 @@ from beanie import init_beanie
 
 import os
 import sys
+import json
+from pathlib import Path
 ROOT_DIR = os.path.abspath(
     os.path.join(
         os.path.dirname(__file__), '../'
@@ -23,6 +25,37 @@ from core.logger import SimpleLogger
 mongo_client: AsyncIOMotorClient = None
 service_factory: ServiceFactory = None
 logger = SimpleLogger(__name__)
+
+
+def load_contextual_data() -> tuple[dict, dict]:
+    """Pre-load contextual data (objects and ASR) into memory"""
+    
+    objects_data = {}
+    asr_data = {}
+    
+    try:
+        # Load objects data
+        objects_file_path = Path(ROOT_DIR) / 'resources' / 'objects' / 'objects_data.json'
+        if objects_file_path.exists():
+            with open(objects_file_path, 'r', encoding='utf-8') as f:
+                objects_data = json.load(f)
+            logger.info(f"Loaded {len(objects_data)} object detection entries")
+        else:
+            logger.warning(f"Objects data file not found: {objects_file_path}")
+        
+        # Load ASR data
+        asr_file_path = Path(ROOT_DIR) / 'resources' / 'metadata' / 'asr_data.json'
+        if asr_file_path.exists():
+            with open(asr_file_path, 'r', encoding='utf-8') as f:
+                asr_data = json.load(f)
+            logger.info(f"Loaded {len(asr_data)} ASR entries")
+        else:
+            logger.warning(f"ASR data file not found: {asr_file_path}")
+        
+    except Exception as e:
+        logger.error(f"Failed to load contextual data: {e}")
+    
+    return objects_data, asr_data
 
 
 @asynccontextmanager
@@ -77,8 +110,13 @@ async def lifespan(app: FastAPI):
         )
         logger.info("Service factory initialized successfully")
         
+        # Pre-load contextual data into memory
+        objects_data, asr_data = load_contextual_data()
+        
         app.state.service_factory = service_factory
         app.state.mongo_client = mongo_client
+        app.state.objects_data = objects_data
+        app.state.asr_data = asr_data
         
         logger.info("Application startup completed successfully")
         

@@ -98,7 +98,8 @@ class KeyframeQueryService:
                         group_num=int(keyframe.group_num),
                         keyframe_num=int(keyframe.keyframe_num),
                         confidence_score=float(result.distance),
-                        embedding=result.embedding
+                        embedding=result.embedding,
+                        phash=keyframe.phash
                     )
                 )
         return response
@@ -212,7 +213,8 @@ class KeyframeQueryService:
                         group_num=kf.group_num,
                         keyframe_num=kf.keyframe_num,
                         confidence_score=result.distance,
-                        embedding=result.embedding
+                        embedding=result.embedding,
+                        phash=kf.phash
                     )
                 )
                 continue
@@ -230,7 +232,8 @@ class KeyframeQueryService:
                         group_num=result.group_num,
                         keyframe_num=result.keyframe_num,
                         confidence_score=result.distance,
-                        embedding=result.embedding
+                        embedding=result.embedding,
+                        phash=None  # No phash available from Milvus metadata
                     )
                 )
                 continue
@@ -295,6 +298,7 @@ class KeyframeQueryService:
                                 group_num=kf.group_num,
                                 keyframe_num=kf.keyframe_num,
                                 confidence_score=r.distance,
+                                phash=kf.phash
                             )
                         )
 
@@ -348,6 +352,7 @@ class KeyframeQueryService:
                     group_num=kf.group_num,
                     keyframe_num=kf.keyframe_num,
                     confidence_score=r.distance,
+                    phash=kf.phash
                 )
             )
 

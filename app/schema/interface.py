@@ -6,6 +6,7 @@ class KeyframeInterface(BaseModel):
     video_num: int = Field(..., description="Video ID")
     group_num: int = Field(..., description="Group ID")
     keyframe_num: int = Field(..., description="Keyframe number")
+    phash: Optional[str] = Field(None, description="Perceptual hash of the keyframe image")
 
 
 

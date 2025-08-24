@@ -37,7 +37,8 @@ class KeyframeRepository(MongoBaseRepository[Keyframe]):
                 key=int(keyframe.key),
                 video_num=safe_convert_video_num(keyframe.video_num),
                 group_num=int(keyframe.group_num),
-                keyframe_num=int(keyframe.keyframe_num)
+                keyframe_num=int(keyframe.keyframe_num),
+                phash=keyframe.phash
             ) for keyframe in result
 
         ]
@@ -52,7 +53,8 @@ class KeyframeRepository(MongoBaseRepository[Keyframe]):
                 key=int(keyframe.key),
                 video_num=safe_convert_video_num(keyframe.video_num),
                 group_num=int(keyframe.group_num),
-                keyframe_num=int(keyframe.keyframe_num)
+                keyframe_num=int(keyframe.keyframe_num),
+                phash=keyframe.phash
             ) for keyframe in result
         ]
 
@@ -66,7 +68,8 @@ class KeyframeRepository(MongoBaseRepository[Keyframe]):
                 key=int(keyframe.key),
                 video_num=safe_convert_video_num(keyframe.video_num),
                 group_num=int(keyframe.group_num),
-                keyframe_num=int(keyframe.keyframe_num)
+                keyframe_num=int(keyframe.keyframe_num),
+                phash=keyframe.phash
             ) for keyframe in result
         ]   
 

@@ -356,8 +356,7 @@ class TemporalSearchService:
         try:
             # Use actual PerceptualHashDeduplicator
             deduplicated_keyframes = await self.deduplicator.deduplicate_keyframes(
-                keyframes=keyframes,
-                data_folder=self.data_folder
+                keyframes=keyframes
             )
             
             print(f"Deduplication: {len(keyframes)} → {len(deduplicated_keyframes)} keyframes")

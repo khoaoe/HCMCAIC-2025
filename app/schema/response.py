@@ -9,6 +9,7 @@ class KeyframeServiceReponse(BaseModel):
     keyframe_num: int = Field(..., description="Keyframe number")
     confidence_score: float = Field(..., description="Keyframe number")
     embedding: Optional[List[float]] = Field(None, description="The embedding vector for this keyframe")
+    phash: Optional[str] = Field(None, description="Perceptual hash of the keyframe image")
 
 
 class SingleKeyframeDisplay(BaseModel):

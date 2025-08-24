@@ -89,23 +89,26 @@ def get_service_factory(request: Request) -> ServiceFactory:
 
 def get_agent_controller(
     service_factory = Depends(get_service_factory),
-    app_settings: AppSettings = Depends(get_app_settings)
+    app_settings: AppSettings = Depends(get_app_settings),
+    request: Request = None
 ) -> AgentController:
     llm = get_llm()
     keyframe_service = service_factory.get_keyframe_query_service()
     model_service = service_factory.get_model_service()
 
     data_folder = app_settings.DATA_FOLDER
-    objects_data_path = Path(app_settings.FRAME2OBJECT)
-    asr_data_path = Path(app_settings.ASR_PATH)
+    
+    # Get pre-loaded contextual data from app state
+    objects_data = getattr(request.app.state, 'objects_data', {})
+    asr_data = getattr(request.app.state, 'asr_data', {})
 
     return AgentController(
         llm=llm,
         keyframe_service=keyframe_service,
         model_service=model_service,
         data_folder=data_folder,
-        objects_data_path=objects_data_path,
-        asr_data_path=asr_data_path,
+        objects_data=objects_data,
+        asr_data=asr_data,
         top_k=50
     )
 
@@ -194,7 +197,8 @@ def get_milvus_repository(service_factory: ServiceFactory = Depends(get_service_
 def get_query_controller(
     model_service: ModelService = Depends(get_model_service),
     keyframe_service: KeyframeQueryService = Depends(get_keyframe_service),
-    app_settings: AppSettings = Depends(get_app_settings)
+    app_settings: AppSettings = Depends(get_app_settings),
+    request: Request = None
 ) -> QueryController:
     """Get query controller instance"""
     try:
@@ -213,15 +217,16 @@ def get_query_controller(
             with open(id2index_path, 'w') as f:
                 json.dump({}, f)
         
-        from pathlib import Path as _Path
-        objects_path = _Path(app_settings.OBJECTS_FILE) if hasattr(app_settings, 'OBJECTS_FILE') else None
+        # Get pre-loaded objects data from app state
+        objects_data = getattr(request.app.state, 'objects_data', {})
+        
         controller = QueryController(
             data_folder=data_folder,
             id2index_path=id2index_path,
             model_service=model_service,
             keyframe_service=keyframe_service,
             llm=get_llm(),
-            objects_data_path=objects_path
+            objects_data=objects_data
         )
         
         logger.info("Query controller created successfully")
@@ -237,7 +242,8 @@ def get_query_controller(
 
 def get_competition_controller(
     service_factory = Depends(get_service_factory),
-    app_settings: AppSettings = Depends(get_app_settings)
+    app_settings: AppSettings = Depends(get_app_settings),
+    request: Request = None
 ) -> CompetitionController:
     """Get competition controller instance for HCMC AI Challenge 2025 tasks"""
     try:
@@ -246,8 +252,10 @@ def get_competition_controller(
         model_service = service_factory.get_model_service()
 
         data_folder = app_settings.DATA_FOLDER
-        objects_data_path = Path(app_settings.FRAME2OBJECT) if hasattr(app_settings, 'FRAME2OBJECT') else None
-        asr_data_path = Path(app_settings.ASR_PATH) if hasattr(app_settings, 'ASR_PATH') else None
+        
+        # Get pre-loaded contextual data from app state
+        objects_data = getattr(request.app.state, 'objects_data', {})
+        asr_data = getattr(request.app.state, 'asr_data', {})
         
         # Optional video metadata path for temporal mapping
         video_metadata_path = Path(app_settings.VIDEO_METADATA_PATH) if hasattr(app_settings, 'VIDEO_METADATA_PATH') else None
@@ -257,8 +265,8 @@ def get_competition_controller(
             keyframe_service=keyframe_service,
             model_service=model_service,
             data_folder=data_folder,
-            objects_data_path=objects_data_path,
-            asr_data_path=asr_data_path,
+            objects_data=objects_data,
+            asr_data=asr_data,
             video_metadata_path=video_metadata_path
         )
         

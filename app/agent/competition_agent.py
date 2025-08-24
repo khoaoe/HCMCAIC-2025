@@ -1,6 +1,6 @@
 """
  Competition Agent for HCMC AI Challenge 2025
-Implements advanced multimodal fusion, sophisticated temporal localization,
+Implements multimodal fusion, sophisticated temporal localization,
 and optimized performance for all competition tasks
 """
 
@@ -21,6 +21,8 @@ from llama_index.core.llms import ChatMessage, ImageBlock, TextBlock, MessageRol
 from .prompts import CompetitionPrompts
 from .temporal_localization import TemporalLocalizer, ASRTemporalAligner
 from .performance_optimizer import PerformanceOptimizer, CompetitionModeOptimizer
+from .query_processor import QueryProcessor, QueryUnderstandingModule
+from .reranker import LLMReranker, DiversityReranker
 from service.search_service import KeyframeQueryService
 from service.model_service import ModelService
 from schema.response import KeyframeServiceReponse
@@ -33,135 +35,8 @@ from schema.competition import (
 
 from utils.video_utils import safe_convert_video_num
 
-class AdvancedQueryProcessor:
-    """ query processing with semantic understanding and expansion"""
-    
-    def __init__(self, llm: LLM, model_service: ModelService):
-        self.llm = llm
-        self.model_service = model_service
-        
-        self.query_analysis_prompt = PromptTemplate(
-            """
-            Analyze this video search query and extract structured information for optimal retrieval.
-            
-            Query: {query}
-            
-            Extract:
-            1. **Primary Visual Elements**: Main objects, people, scenes, settings
-            2. **Actions & Interactions**: Specific movements, activities, behaviors
-            3. **Temporal Indicators**: Sequence words, time references, duration cues
-            4. **Spatial Relationships**: Locations, positions, directions
-            5. **Descriptive Attributes**: Colors, sizes, styles, emotions
-            6. **Context Clues**: Background information, situational context
-            
-            Return JSON with:
-            - "primary_focus": Main search target (2-3 key terms)
-            - "visual_elements": List of important visual components
-            - "actions": List of actions/verbs
-            - "temporal_cues": Time-related information
-            - "context": Setting/environmental details
-            - "complexity": "simple"/"moderate"/"complex"
-            - "search_variations": 3-4 alternative query formulations
-            """
-        )
-    
-    async def analyze_and_expand_query(self, query: str) -> Dict[str, Any]:
-        """Advanced query analysis with semantic expansion"""
-        
-        try:
-            prompt = self.query_analysis_prompt.format(query=query)
-            response = await self.llm.acomplete(prompt)
-            
-            # Parse LLM response - attempt JSON parsing with fallback
-            response_text = str(response).strip()
-            
-            try:
-                analysis = json.loads(response_text)
-            except json.JSONDecodeError:
-                # Fallback parsing if JSON fails
-                analysis = self._parse_analysis_fallback(response_text, query)
-            
-            # Generate semantic variations using embeddings
-            semantic_variations = await self._generate_semantic_variations(query, analysis)
-            analysis["semantic_variations"] = semantic_variations
-            
-            return analysis
-            
-        except Exception as e:
-            print(f"Warning: Query analysis failed: {e}")
-            return {
-                "primary_focus": query,
-                "visual_elements": [],
-                "actions": [],
-                "temporal_cues": [],
-                "context": "",
-                "complexity": "moderate",
-                "search_variations": [query],
-                "semantic_variations": [query]
-            }
-    
-    def _parse_analysis_fallback(self, response_text: str, original_query: str) -> Dict[str, Any]:
-        """Fallback parsing when JSON parsing fails"""
-        
-        # Simple keyword extraction as fallback
-        words = original_query.lower().split()
-        
-        # Common action verbs
-        action_words = {'walk', 'run', 'sit', 'stand', 'talk', 'drive', 'cook', 'eat', 'drink', 'play', 'write', 'read'}
-        actions = [word for word in words if word in action_words]
-        
-        # Temporal indicators
-        temporal_words = {'before', 'after', 'during', 'while', 'then', 'next', 'first', 'last', 'when'}
-        temporal_cues = [word for word in words if word in temporal_words]
-        
-        return {
-            "primary_focus": original_query,
-            "visual_elements": words[:3],  # First 3 words as visual elements
-            "actions": actions,
-            "temporal_cues": temporal_cues,
-            "context": original_query,
-            "complexity": "moderate",
-            "search_variations": [original_query]
-        }
-    
-    async def _generate_semantic_variations(self, original_query: str, analysis: Dict[str, Any]) -> List[str]:
-        """Generate semantic variations using different focus areas"""
-        
-        variations = [original_query]  # Always include original
-        
-        try:
-            # Visual-focused variation
-            if analysis.get("visual_elements"):
-                visual_terms = " ".join(analysis["visual_elements"][:3])
-                variations.append(f"{visual_terms} scene visual content")
-            
-            # Action-focused variation
-            if analysis.get("actions"):
-                action_terms = " ".join(analysis["actions"])
-                variations.append(f"{action_terms} activity movement")
-            
-            # Context-focused variation
-            if analysis.get("context") and analysis["context"] != original_query:
-                variations.append(f"{analysis['context']} environment setting")
-            
-            # Add variations from LLM if available
-            if analysis.get("search_variations"):
-                variations.extend(analysis["search_variations"][:3])
-            
-            # Remove duplicates and limit
-            unique_variations = []
-            for var in variations:
-                if var not in unique_variations and len(var.strip()) > 5:
-                    unique_variations.append(var)
-            
-            return unique_variations[:5]  # Limit to 5 variations
-            
-        except Exception as e:
-            print(f"Warning: Semantic variation generation failed: {e}")
-            return [original_query]
 
-
-class AdvancedVisualMatcher:
+class VisualMatcher:
     """ visual similarity matching for KIS-V tasks"""
     
     def __init__(self, model_service: ModelService, data_folder: str):
@@ -174,7 +49,7 @@ class AdvancedVisualMatcher:
         keyframes: List[KeyframeServiceReponse],
         top_k: int = 50
     ) -> List[Tuple[KeyframeServiceReponse, float]]:
-        """Find visual matches using advanced similarity metrics"""
+        """Find visual matches using similarity metrics"""
         
         try:
             # For now, implement as  textual matching
@@ -223,187 +98,12 @@ class AdvancedVisualMatcher:
         return f"visual content from query clip {clip_path}"
 
 
-class LLMReranker:
-    """Sophisticated LLM-based reranking with actual parsing and reordering"""
+
     
-    def __init__(self, llm: LLM):
-        self.llm = llm
-        
-        self.reranking_prompt = PromptTemplate(
-            """
-            Rerank these video moment candidates based on relevance to the query.
-            
-            Query: {query}
-            
-            Candidates:
-            {candidates_info}
-            
-            For each candidate, provide:
-            1. Relevance score (0.0-1.0)
-            2. Brief rationale (1-2 sentences)
-            
-            Consider:
-            - Visual content alignment with query
-            - Action/event matching
-            - Temporal context appropriateness
-            - ASR text relevance
-            - Object detection support
-            - Overall coherence and completeness
-            
-            Scoring Guidelines:
-            - 0.9-1.0: Perfect match with all query elements
-            - 0.7-0.8: Strong match with most query elements
-            - 0.5-0.6: Moderate match with some query elements
-            - 0.3-0.4: Weak match with few query elements
-            - 0.0-0.2: Poor match or irrelevant content
-            
-            Return JSON array with format:
-            [
-                {{
-                    "candidate_id": 1,
-                    "relevance_score": 0.85,
-                    "rationale": "Strong visual match with query elements"
-                }},
-                ...
-            ]
-            
-            Sort by relevance_score (highest first).
-            """
-        )
-    
-    async def rerank_candidates(
-        self, 
-        query: str, 
-        candidates: List[MomentCandidate]
-    ) -> List[MomentCandidate]:
-        """Rerank candidates using LLM with actual parsing"""
-        
-        if len(candidates) <= 1:
-            return candidates
-        
-        # Prepare candidate information with enhanced context
-        candidates_info = []
-        for i, candidate in enumerate(candidates):
-            # Enhanced context information
-            objects_info = ', '.join(candidate.detected_objects[:8]) if candidate.detected_objects else 'None detected'
-            asr_info = candidate.asr_text[:200] + '...' if candidate.asr_text and len(candidate.asr_text) > 200 else candidate.asr_text or 'No ASR'
-            
-            info = f"""
-            Candidate {i+1}:
-            - Video: {candidate.video_id}
-            - Time: {candidate.start_time:.1f}s - {candidate.end_time:.1f}s
-            - Original Score: {candidate.confidence_score:.3f}
-            - Detected Objects: {objects_info}
-            - ASR Text: {asr_info}
-            - Duration: {candidate.end_time - candidate.start_time:.1f}s
-            """
-            candidates_info.append(info.strip())
-        
-        try:
-            prompt = self.reranking_prompt.format(
-                query=query,
-                candidates_info='\n\n'.join(candidates_info)
-            )
-            
-            response = await self.llm.acomplete(prompt)
-            response_text = str(response).strip()
-            
-            # Parse LLM response
-            reranked_candidates = self._parse_reranking_response(response_text, candidates)
-            
-            return reranked_candidates
-            
-        except Exception as e:
-            print(f"Warning: LLM reranking failed: {e}")
-            return candidates
-    
-    def _parse_reranking_response(
-        self, 
-        response_text: str, 
-        original_candidates: List[MomentCandidate]
-    ) -> List[MomentCandidate]:
-        """Parse LLM reranking response and reorder candidates"""
-        
-        try:
-            # Try to parse JSON response
-            if '[' in response_text and ']' in response_text:
-                start_idx = response_text.find('[')
-                end_idx = response_text.rfind(']') + 1
-                json_text = response_text[start_idx:end_idx]
-                
-                rankings = json.loads(json_text)
-                
-                # Create reordered list based on rankings
-                reordered = []
-                for ranking in rankings:
-                    candidate_id = ranking.get('candidate_id', 1)
-                    relevance_score = ranking.get('relevance_score', 0.5)
-                    
-                    # Get corresponding candidate (1-indexed to 0-indexed)
-                    if 1 <= candidate_id <= len(original_candidates):
-                        candidate = original_candidates[candidate_id - 1]
-                        # Update confidence score with LLM relevance
-                        candidate.confidence_score = relevance_score
-                        reordered.append(candidate)
-                
-                # If we successfully reordered all candidates, return reordered list
-                if len(reordered) == len(original_candidates):
-                    return reordered
-            
-            # Fallback: try to extract scores with regex
-            return self._parse_scores_fallback(response_text, original_candidates)
-            
-        except Exception as e:
-            print(f"Warning: Failed to parse reranking response: {e}")
-            return original_candidates
-    
-    def _parse_scores_fallback(
-        self, 
-        response_text: str, 
-        original_candidates: List[MomentCandidate]
-    ) -> List[MomentCandidate]:
-        """Fallback parsing using regex to extract scores"""
-        
-        try:
-            # Look for patterns like "Candidate 1: 0.85" or "1. Score: 0.75"
-            score_patterns = [
-                r'[Cc]andidate\s*(\d+).*?(\d+\.?\d*)',
-                r'(\d+)\..*?[Ss]core.*?(\d+\.?\d*)',
-                r'(\d+).*?(\d+\.?\d*)'
-            ]
-            
-            scores = {}
-            for pattern in score_patterns:
-                matches = re.findall(pattern, response_text)
-                for match in matches:
-                    try:
-                        candidate_id = int(match[0])
-                        score = float(match[1])
-                        if 0 <= score <= 1 and 1 <= candidate_id <= len(original_candidates):
-                            scores[candidate_id] = score
-                    except (ValueError, IndexError):
-                        continue
-                
-                if scores:
-                    break
-            
-            if scores:
-                # Update scores and sort
-                for candidate_id, score in scores.items():
-                    if 1 <= candidate_id <= len(original_candidates):
-                        original_candidates[candidate_id - 1].confidence_score = score
-                
-                # Sort by updated scores
-                original_candidates.sort(key=lambda x: x.confidence_score, reverse=True)
-            
-            return original_candidates
-            
-        except Exception as e:
-            print(f"Warning: Fallback score parsing failed: {e}")
-            return original_candidates
 
 
-class AdvancedTemporalRefiner:
+
+class TemporalRefiner:
     """ temporal boundary refinement"""
     
     def __init__(self, temporal_localizer: TemporalLocalizer, asr_aligner: ASRTemporalAligner):
@@ -501,7 +201,7 @@ class AdvancedTemporalRefiner:
 
 class CompetitionAgent:
     """
-     agent with advanced multimodal fusion and sophisticated processing
+     agent with multimodal fusion and sophisticated processing
     """
     
     def __init__(
@@ -523,10 +223,10 @@ class CompetitionAgent:
         self.performance_optimizer = PerformanceOptimizer()
         
         # Initialize  modules
-        self.query_processor = AdvancedQueryProcessor(llm, model_service)
-        self.visual_matcher = AdvancedVisualMatcher(model_service, data_folder)
+        self.query_processor = QueryProcessor(llm, model_service)
+        self.visual_matcher = VisualMatcher(model_service, data_folder)
         self.llm_reranker = LLMReranker(llm)
-        self.temporal_refiner = AdvancedTemporalRefiner(self.temporal_localizer, self.asr_aligner)
+        self.temporal_refiner = TemporalRefiner(self.temporal_localizer, self.asr_aligner)
         
         # Services
         self.keyframe_service = keyframe_service
@@ -540,12 +240,12 @@ class CompetitionAgent:
         self, 
         request: VCMRAutomaticRequest
     ) -> VCMRAutomaticResponse:
-        """ VCMR automatic with advanced processing"""
+        """ VCMR automatic with processing"""
         
         start_time = time.time()
         
         try:
-            # Stage 1: Advanced query analysis and expansion
+            # Stage 1: query analysis and expansion
             query_analysis = await self.query_processor.analyze_and_expand_query(request.query)
             
             # Stage 2: Adaptive search parameters
@@ -609,7 +309,7 @@ class CompetitionAgent:
                 
                 moments.append(refined_moment)
             
-            # Stage 6: Advanced LLM reranking
+            # Stage 6: LLM reranking
             if len(moments) > 1:
                 reranked_moments = await self.llm_reranker.rerank_candidates(
                     request.query, moments[:perf_settings["rerank_top_k"]]
@@ -772,7 +472,7 @@ class CompetitionAgent:
         self, 
         request: KISVisualRequest
     ) -> KISResponse:
-        """ KIS visual with advanced visual matching"""
+        """ KIS visual with visual matching"""
         
         try:
             # First, get candidate keyframes using broad search
@@ -783,7 +483,7 @@ class CompetitionAgent:
                 score_threshold=0.1
             )
             
-            # Apply advanced visual matching
+            # Apply visual matching
             visual_matches = await self.visual_matcher.find_visual_matches(
                 request.query_clip_uri, candidate_keyframes, top_k=10
             )

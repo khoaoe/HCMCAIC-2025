@@ -25,13 +25,13 @@ class AgentController:
         keyframe_service: KeyframeQueryService,
         model_service: ModelService,
         data_folder: str,
-        objects_data_path: Optional[Path] = None,
-        asr_data_path: Optional[Path] = None,
+        objects_data: Optional[Dict] = None,
+        asr_data: Optional[Dict] = None,
         top_k: int = 200
     ):
         
-        objects_data = self._load_json_data(objects_data_path) if objects_data_path else {}
-        asr_data = self._load_json_data(asr_data_path) if asr_data_path else {}
+        objects_data = objects_data or {}
+        asr_data = asr_data or {}
 
         self.agent = KeyframeSearchAgent(
             llm=llm,

@@ -1,6 +1,6 @@
 """
 SuperGlobal Reranking Module
-Implements GRAB framework's advanced reranking using Generalized Mean (GeM) pooling
+Implements GRAB framework's reranking using Generalized Mean (GeM) pooling
 """
 
 import numpy as np
@@ -314,7 +314,7 @@ class GRABTemporalSearchOptimizer:
         # Stage 2: Perceptual deduplication
         if self.enable_deduplication and self.deduplicator:
             optimized_keyframes = self.deduplicator.deduplicate_keyframes(
-                optimized_keyframes, self.data_folder
+                optimized_keyframes
             )
         
         # Stage 3: SuperGlobal reranking

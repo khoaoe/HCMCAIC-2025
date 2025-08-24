@@ -174,28 +174,21 @@ class PerceptualHashDeduplicator:
     
     def deduplicate_keyframes(
         self,
-        keyframes: List[KeyframeServiceReponse],
-        data_folder: str
+        keyframes: List[KeyframeServiceReponse]
     ) -> List[KeyframeServiceReponse]:
         """
-        Remove near-duplicate keyframes using perceptual hashing
+        Remove near-duplicate keyframes using pre-loaded perceptual hashes
         Following GRAB's deduplication approach
         """
         
         if not keyframes:
             return []
         
-        # Compute hashes for all keyframes
+        # Use pre-loaded hashes from KeyframeServiceReponse objects
         keyframe_hashes = {}
         for kf in keyframes:
-            image_path = os.path.join(
-                data_folder,
-                f"L{str(kf.group_num):0>2s}/L{str(kf.group_num):0>2s}_V{str(safe_convert_video_num(kf.video_num)):0>3s}/{int(kf.keyframe_num):0>3d}.jpg"
-            )
-            
-            if os.path.exists(image_path):
-                phash = self.compute_perceptual_hash(image_path)
-                keyframe_hashes[kf.key] = phash
+            if kf.phash:
+                keyframe_hashes[kf.key] = kf.phash
         
         # Deduplicate based on hash similarity
         unique_keyframes = []
@@ -205,7 +198,7 @@ class PerceptualHashDeduplicator:
             kf_hash = keyframe_hashes.get(kf.key, "")
             
             if not kf_hash:
-                unique_keyframes.append(kf)  # Keep if no hash computed
+                unique_keyframes.append(kf)  # Keep if no hash available
                 continue
             
             # Check similarity with already processed hashes

@@ -35,7 +35,7 @@ class QueryController:
         model_service: ModelService,
         keyframe_service: KeyframeQueryService,
         llm: LLM | None = None,
-        objects_data_path: Path | None = None
+        objects_data: Dict | None = None
     ):
         self.data_folder = data_folder
         self.id2index = json.load(open(id2index_path, 'r'))
@@ -45,13 +45,7 @@ class QueryController:
         # Optional agent components for query refinement and object filtering
         self.llm = llm
         self.visual_extractor = VisualEventExtractor(llm) if llm is not None else None
-        self.objects_data = {}
-        if objects_data_path and objects_data_path.exists():
-            try:
-                with open(objects_data_path, 'r', encoding='utf-8') as f:
-                    self.objects_data = json.load(f)
-            except Exception:
-                self.objects_data = {}
+        self.objects_data = objects_data or {}
         
         # Initialize temporal search with GRAB framework
         self.temporal_search_service = TemporalSearchService(
