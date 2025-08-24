@@ -16,18 +16,7 @@ from repository.mongo import KeyframeRepository
 from schema.response import KeyframeServiceReponse
 
 
-def safe_convert_video_num(video_num) -> int:
-    """Safely convert video_num to int, handling cases where it might be '26_V288' format"""
-    if isinstance(video_num, str):
-        # Handle cases where video_num might be '26_V288' format
-        if '_V' in video_num:
-            # Extract just the video number part
-            video_part = video_num.split('_V')[-1]
-            return int(video_part)
-        else:
-            return int(video_num)
-    else:
-        return int(video_num)
+from utils.video_utils import safe_convert_video_num
 
 
 class KeyframeQueryService:
@@ -108,7 +97,8 @@ class KeyframeQueryService:
                         video_num=safe_convert_video_num(keyframe.video_num),
                         group_num=int(keyframe.group_num),
                         keyframe_num=int(keyframe.keyframe_num),
-                        confidence_score=float(result.distance)
+                        confidence_score=float(result.distance),
+                        embedding=result.embedding
                     )
                 )
         return response
@@ -222,6 +212,7 @@ class KeyframeQueryService:
                         group_num=kf.group_num,
                         keyframe_num=kf.keyframe_num,
                         confidence_score=result.distance,
+                        embedding=result.embedding
                     )
                 )
                 continue
@@ -239,6 +230,7 @@ class KeyframeQueryService:
                         group_num=result.group_num,
                         keyframe_num=result.keyframe_num,
                         confidence_score=result.distance,
+                        embedding=result.embedding
                     )
                 )
                 continue

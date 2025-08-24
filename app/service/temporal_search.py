@@ -22,18 +22,7 @@ from agent.abts_algorithm import AdaptiveBidirectionalTemporalSearch
 from agent.shot_detection import PerceptualHashDeduplicator
 
 
-def safe_convert_video_num(video_num) -> int:
-    """Safely convert video_num to int, handling cases where it might be '26_V288' format"""
-    if isinstance(video_num, str):
-        # Handle cases where video_num might be '26_V288' format
-        if '_V' in video_num:
-            # Extract just the video number part
-            video_part = video_num.split('_V')[-1]
-            return int(video_part)
-        else:
-            return int(video_num)
-    else:
-        return int(video_num)
+from utils.video_utils import safe_convert_video_num
 
 
 class TemporalSearchService:
@@ -67,8 +56,9 @@ class TemporalSearchService:
         if self.optimization_config["enable_superglobal_reranking"]:
             self.superglobal_reranker = SuperGlobalReranker(
                 model_service=self.model_service,
-                k_neighbors=10,  # Number of neighbors for feature refinement
-                lambda_weight=0.5  # Weight for combining S1 and S2 scores
+                neighbor_k=10,  # Number of neighbors for feature refinement
+                lambda_s1=0.5,  # Weight for S1 (original query vs refined DB)
+                lambda_s2=0.5   # Weight for S2 (expanded query vs original DB)
             )
         else:
             self.superglobal_reranker = None
@@ -412,8 +402,7 @@ class TemporalSearchService:
             # Use actual SuperGlobalReranker with GeM pooling
             reranked_keyframes = await self.superglobal_reranker.rerank_keyframes(
                 query=query,
-                keyframes=keyframes,
-                data_folder=self.data_folder
+                keyframes=keyframes
             )
             
             print(f"SuperGlobal Reranking: {len(keyframes)} → {len(reranked_keyframes)} keyframes")
@@ -434,7 +423,8 @@ class TemporalSearchService:
                     video_num=safe_convert_video_num(kf.video_num),
                     group_num=int(kf.group_num),
                     keyframe_num=int(kf.keyframe_num),
-                    confidence_score=min(1.0, enhanced_score)  # Clamp to max 1.0
+                    confidence_score=min(1.0, enhanced_score),  # Clamp to max 1.0
+                    embedding=kf.embedding
                 )
                 enhanced_keyframes.append(enhanced_kf)
             
@@ -549,8 +539,7 @@ class TemporalSearchService:
                 abts_result = await self.abts.find_optimal_boundaries(
                     query=query,
                     pivot_keyframe=pivot_keyframe,
-                    context_keyframes=context_keyframes,
-                    data_folder=self.data_folder
+                    context_keyframes=context_keyframes
                 )
                 
                 # Update moment with refined boundaries

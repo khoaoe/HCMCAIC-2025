@@ -1,4 +1,5 @@
 from pydantic import BaseModel, Field
+from typing import List, Optional
 
 
 class KeyframeServiceReponse(BaseModel):
@@ -7,7 +8,7 @@ class KeyframeServiceReponse(BaseModel):
     group_num: int = Field(..., description="Group ID")
     keyframe_num: int = Field(..., description="Keyframe number")
     confidence_score: float = Field(..., description="Keyframe number")
-    
+    embedding: Optional[List[float]] = Field(None, description="The embedding vector for this keyframe")
 
 
 class SingleKeyframeDisplay(BaseModel):

@@ -19,18 +19,7 @@ from service.model_service import ModelService
 from schema.response import KeyframeServiceReponse
 
 
-def safe_convert_video_num(video_num) -> int:
-    """Safely convert video_num to int, handling cases where it might be '26_V288' format"""
-    if isinstance(video_num, str):
-        # Handle cases where video_num might be '26_V288' format
-        if '_V' in video_num:
-            # Extract just the video number part
-            video_part = video_num.split('_V')[-1]
-            return int(video_part)
-        else:
-            return int(video_num)
-    else:
-        return int(video_num)
+from utils.video_utils import safe_convert_video_num
 
 
 def apply_diversity_enhancement(

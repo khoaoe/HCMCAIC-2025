@@ -13,18 +13,7 @@ from schema.response import KeyframeServiceReponse
 from service.model_service import ModelService
 
 
-def safe_convert_video_num(video_num) -> int:
-    """Safely convert video_num to int, handling cases where it might be '26_V288' format"""
-    if isinstance(video_num, str):
-        # Handle cases where video_num might be '26_V288' format
-        if '_V' in video_num:
-            # Extract just the video number part
-            video_part = video_num.split('_V')[-1]
-            return int(video_part)
-        else:
-            return int(video_num)
-    else:
-        return int(video_num)
+from utils.video_utils import safe_convert_video_num
 
 
 class GeMPooling:
@@ -135,7 +124,6 @@ class SuperGlobalReranker:
         self,
         query: str,
         keyframes: List[KeyframeServiceReponse],
-        data_folder: str,
         initial_top_k: int = 100
     ) -> List[KeyframeServiceReponse]:
         """
@@ -148,8 +136,17 @@ class SuperGlobalReranker:
         
         print(f"SuperGlobal reranking {len(keyframes)} keyframes...")
         
-        # Step 1: Get embeddings for all keyframes
-        keyframe_embeddings = await self._get_keyframe_embeddings(keyframes, data_folder)
+        # Step 1: Get embeddings FOR ALL KEYFRAMES directly from the input objects
+        keyframe_embeddings = [np.array(kf.embedding) for kf in keyframes if kf.embedding is not None]
+        
+        # If some keyframes lack embeddings, handle it gracefully
+        if len(keyframe_embeddings) != len(keyframes):
+            print("Warning: Some keyframes are missing embeddings. Reranking might be inaccurate.")
+            # Filter keyframes to only those with embeddings
+            keyframes_with_embeddings = [kf for kf in keyframes if kf.embedding is not None]
+            if not keyframes_with_embeddings:
+                return keyframes # Return original if no embeddings are found
+            keyframes = keyframes_with_embeddings
         
         # Step 2: Get query embedding
         query_embedding = self.model_service.embedding(query)[0]  # Get first row
@@ -203,7 +200,8 @@ class SuperGlobalReranker:
                 video_num=safe_convert_video_num(kf.video_num),
                 group_num=kf.group_num,
                 keyframe_num=kf.keyframe_num,
-                confidence_score=final_scores[i]
+                confidence_score=final_scores[i],
+                embedding=kf.embedding
             )
             reranked_keyframes.append(kf_copy)
         
@@ -214,48 +212,7 @@ class SuperGlobalReranker:
         
         return reranked_keyframes
     
-    async def _get_keyframe_embeddings(
-        self,
-        keyframes: List[KeyframeServiceReponse],
-        data_folder: str
-    ) -> List[np.ndarray]:
-        """
-        Get or compute embeddings for keyframes
-        Uses image-based embedding extraction
-        """
-        
-        embeddings = []
-        
-        for kf in keyframes:
-            cache_key = f"{kf.group_num}_{kf.video_num}_{kf.keyframe_num}"
-            
-            if cache_key in self.embedding_cache:
-                embeddings.append(self.embedding_cache[cache_key])
-            else:
-                # Compute embedding from image
-                image_path = os.path.join(
-                    data_folder,
-                    f"L{str(kf.group_num):0>2s}/L{str(kf.group_num):0>2s}_V{str(safe_convert_video_num(kf.video_num)):0>3s}/{str(kf.keyframe_num):0>3d}.jpg"
-                )
-                
-                if os.path.exists(image_path):
-                    # Extract real embedding from image using model service
-                    try:
-                        embedding = self.model_service.embed_image(image_path)
-                        embeddings.append(embedding)
-                        self.embedding_cache[cache_key] = embedding
-                    except Exception as e:
-                        print(f"Error extracting embedding for {image_path}: {e}")
-                        # Fallback to zero embedding on error
-                        zero_embedding = np.zeros(512, dtype=np.float32)
-                        embeddings.append(zero_embedding)
-                        self.embedding_cache[cache_key] = zero_embedding
-                else:
-                    # Fallback to zero embedding if image not found
-                    zero_embedding = np.zeros(512, dtype=np.float32)
-                    embeddings.append(zero_embedding)
-        
-        return embeddings
+
     
     def _find_neighbors(
         self,
@@ -363,7 +320,7 @@ class GRABTemporalSearchOptimizer:
         # Stage 3: SuperGlobal reranking
         if self.enable_superglobal_reranking and self.reranker and len(optimized_keyframes) > 1:
             optimized_keyframes = await self.reranker.rerank_keyframes(
-                query, optimized_keyframes, self.data_folder
+                query, optimized_keyframes
             )
         
         return optimized_keyframes

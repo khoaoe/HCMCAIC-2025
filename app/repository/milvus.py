@@ -61,13 +61,14 @@ class KeyframeVectorRepository(MilvusBaseRepository):
         expr = " and ".join(expr_clauses) if expr_clauses else None
         
         # Determine output fields based on collection schema
-        base_output_fields = ["id", "embedding"]
+        base_output_fields = ["id"]  # We can remove embedding from here to avoid duplication
         temporal_fields = ["timestamp", "group_num", "video_num", "keyframe_num"]
         
         # Reuse the collection_fields from above
         available_temporal_fields = [field for field in temporal_fields if field in collection_fields]
         
-        output_fields = base_output_fields + available_temporal_fields
+        # ALWAYS request the embedding field
+        output_fields = base_output_fields + available_temporal_fields + ["embedding"]
         
         search_results= cast(SearchResult, self.collection.search(
             data=[request.embedding],

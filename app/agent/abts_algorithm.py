@@ -55,8 +55,7 @@ class AdaptiveBidirectionalTemporalSearch:
         self,
         query: str,
         pivot_keyframe: KeyframeServiceReponse,
-        context_keyframes: List[KeyframeServiceReponse],
-        data_folder: str
+        context_keyframes: List[KeyframeServiceReponse]
     ) -> ABTSResult:
         """
         Find optimal temporal boundaries using ABTS algorithm
@@ -97,7 +96,7 @@ class AdaptiveBidirectionalTemporalSearch:
             return self._create_single_frame_result(pivot_keyframe)
         
         # Prepare embeddings cache for stability calculation
-        embeddings_cache = await self._build_embeddings_cache(video_keyframes, data_folder)
+        embeddings_cache = await self._build_embeddings_cache(video_keyframes)
         
         # Bidirectional search
         start_idx = await self._search_backward(
@@ -233,34 +232,20 @@ class AdaptiveBidirectionalTemporalSearch:
     
     async def _build_embeddings_cache(
         self,
-        keyframes: List[KeyframeServiceReponse],
-        data_folder: str
+        keyframes: List[KeyframeServiceReponse]
     ) -> Dict[int, np.ndarray]:
-        """Build cache of embeddings for stability calculation"""
+        """Build cache of embeddings directly from keyframe objects"""
         
         embeddings_cache = {}
         
         for kf in keyframes:
-            try:
-                # Build image path
-                image_path = f"{data_folder}/L{str(kf.group_num):0>2s}/L{str(kf.group_num):0>2s}_V{str(kf.video_num):0>3s}/{str(kf.keyframe_num):0>3d}.jpg"
-                
-                # Extract real embedding from image
-                if os.path.exists(image_path):
-                    embedding = self.model_service.embed_image(image_path)
-                    embeddings_cache[kf.key] = embedding
-                else:
-                    print(f"Warning: Image not found for keyframe {kf.key}: {image_path}")
-                    # Fallback to zero embedding if image not found
-                    embedding = np.zeros(512, dtype=np.float32)
-                    embeddings_cache[kf.key] = embedding
-                    
-            except Exception as e:
-                print(f"Error extracting embedding for keyframe {kf.key}: {e}")
-                # Fallback to zero embedding on error
-                embedding = np.zeros(512, dtype=np.float32)
-                embeddings_cache[kf.key] = embedding
-        
+            if kf.embedding:
+                embeddings_cache[kf.key] = np.array(kf.embedding)
+            else:
+                # Fallback for safety, though this should be rare after upstream fixes
+                print(f"Warning: Embedding not found for keyframe {kf.key} in ABTS cache build.")
+                embeddings_cache[kf.key] = np.zeros(512, dtype=np.float32) 
+            
         print(f"ABTS: Built embeddings cache with {len(embeddings_cache)} keyframes")
         return embeddings_cache
     
