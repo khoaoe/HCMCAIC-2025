@@ -16,6 +16,10 @@ from schema.competition import MomentCandidate
 from service.search_service import KeyframeQueryService
 from service.model_service import ModelService
 from agent.temporal_localization import TemporalLocalizer
+# Import GRAB components
+from agent.superglobal_reranking import SuperGlobalReranker
+from agent.abts_algorithm import AdaptiveBidirectionalTemporalSearch
+from agent.shot_detection import PerceptualHashDeduplicator
 
 
 def safe_convert_video_num(video_num) -> int:
@@ -52,6 +56,43 @@ class TemporalSearchService:
         
         # Configure optimization level
         self.optimization_config = self._get_optimization_config(optimization_level)
+        
+        # Initialize GRAB components
+        self._initialize_grab_components()
+    
+    def _initialize_grab_components(self):
+        """Initialize GRAB framework components"""
+        
+        # Initialize SuperGlobal Reranker
+        if self.optimization_config["enable_superglobal_reranking"]:
+            self.superglobal_reranker = SuperGlobalReranker(
+                model_service=self.model_service,
+                k_neighbors=10,  # Number of neighbors for feature refinement
+                lambda_weight=0.5  # Weight for combining S1 and S2 scores
+            )
+        else:
+            self.superglobal_reranker = None
+        
+        # Initialize ABTS for boundary refinement
+        if self.optimization_config["enable_abts"]:
+            self.abts = AdaptiveBidirectionalTemporalSearch(
+                model_service=self.model_service,
+                lambda_s=self.optimization_config["lambda_s"],
+                lambda_t=self.optimization_config["lambda_t"],
+                search_window=self.optimization_config["search_window"],
+                confidence_threshold=0.3
+            )
+        else:
+            self.abts = None
+        
+        # Initialize Perceptual Hash Deduplicator
+        if self.optimization_config["enable_deduplication"]:
+            self.deduplicator = PerceptualHashDeduplicator(
+                hash_size=64,
+                similarity_threshold=0.8
+            )
+        else:
+            self.deduplicator = None
     
     async def temporal_search(
         self,
@@ -217,6 +258,14 @@ class TemporalSearchService:
         # Stage 3: Create enhanced temporal moments
         moments = self._create_enhanced_moments(optimized_keyframes, top_k)
         
+        # Stage 4: Apply ABTS boundary refinement if enabled
+        if enable_boundary_refinement and self.abts:
+            moments = await self._refine_moments_with_abts(
+                query=query,
+                moments=moments,
+                all_keyframes=optimized_keyframes
+            )
+        
         # Sort by confidence and return top results
         moments.sort(key=lambda x: x.confidence_score, reverse=True)
         
@@ -307,67 +356,92 @@ class TemporalSearchService:
         self,
         keyframes: List[KeyframeServiceReponse]
     ) -> List[KeyframeServiceReponse]:
-        """Apply perceptual hash deduplication (simplified)"""
+        """Apply perceptual hash deduplication"""
         
-        # For now, apply simple temporal-based deduplication
-        if len(keyframes) <= 1:
+        if not self.deduplicator or len(keyframes) <= 1:
             return keyframes
         
-        deduplicated = [keyframes[0]]  # Always keep first
+        print(f"Applying perceptual hash deduplication to {len(keyframes)} keyframes...")
         
-        for kf in keyframes[1:]:
-            # Check temporal distance from existing keyframes
-            min_temporal_distance = min(
-                abs(kf.keyframe_num - existing.keyframe_num)
-                for existing in deduplicated
-                if existing.group_num == kf.group_num and existing.video_num == kf.video_num
-            ) if any(
-                existing.group_num == kf.group_num and existing.video_num == kf.video_num
-                for existing in deduplicated
-            ) else float('inf')
+        try:
+            # Use actual PerceptualHashDeduplicator
+            deduplicated_keyframes = await self.deduplicator.deduplicate_keyframes(
+                keyframes=keyframes,
+                data_folder=self.data_folder
+            )
             
-            # Keep if sufficiently different temporally (>1 second at 25fps)
-            if min_temporal_distance > 25 or min_temporal_distance == float('inf'):
-                deduplicated.append(kf)
-        
-        return deduplicated
+            print(f"Deduplication: {len(keyframes)} → {len(deduplicated_keyframes)} keyframes")
+            return deduplicated_keyframes
+            
+        except Exception as e:
+            print(f"Warning: Perceptual hash deduplication failed ({e}), falling back to temporal deduplication")
+            
+            # Fallback to temporal-based deduplication
+            deduplicated = [keyframes[0]]  # Always keep first
+            
+            for kf in keyframes[1:]:
+                # Check temporal distance from existing keyframes
+                min_temporal_distance = min(
+                    abs(kf.keyframe_num - existing.keyframe_num)
+                    for existing in deduplicated
+                    if existing.group_num == kf.group_num and existing.video_num == kf.video_num
+                ) if any(
+                    existing.group_num == kf.group_num and existing.video_num == kf.video_num
+                    for existing in deduplicated
+                ) else float('inf')
+                
+                # Keep if sufficiently different temporally (>1 second at 25fps)
+                if min_temporal_distance > 25 or min_temporal_distance == float('inf'):
+                    deduplicated.append(kf)
+            
+            return deduplicated
     
     async def _apply_superglobal_reranking(
         self,
         query: str,
         keyframes: List[KeyframeServiceReponse]
     ) -> List[KeyframeServiceReponse]:
-        """Apply SuperGlobal reranking (simplified)"""
+        """Apply SuperGlobal reranking"""
         
-        if len(keyframes) <= 1:
+        if not self.superglobal_reranker or len(keyframes) <= 1:
             return keyframes
         
-        # Get query embedding
-        query_embedding = self.model_service.embedding(query)[0]
+        print(f"Applying SuperGlobal Reranking to {len(keyframes)} keyframes...")
         
-        # Calculate enhanced scores combining original confidence with query similarity
-        enhanced_keyframes = []
-        
-        for kf in keyframes:
-            # For now, use a simplified reranking that combines original score with position
-            # In full implementation, would use GeM pooling and neighbor analysis
-            
-            # Boost score based on original confidence and add small temporal consistency bonus
-            enhanced_score = kf.confidence_score * 1.1  # Slight boost for reranked items
-            
-            enhanced_kf = KeyframeServiceReponse(
-                key=int(kf.key),
-                video_num=safe_convert_video_num(kf.video_num),
-                group_num=int(kf.group_num),
-                keyframe_num=int(kf.keyframe_num),
-                confidence_score=min(1.0, enhanced_score)  # Clamp to max 1.0
+        try:
+            # Use actual SuperGlobalReranker with GeM pooling
+            reranked_keyframes = await self.superglobal_reranker.rerank_keyframes(
+                query=query,
+                keyframes=keyframes,
+                data_folder=self.data_folder
             )
-            enhanced_keyframes.append(enhanced_kf)
-        
-        # Sort by enhanced scores
-        enhanced_keyframes.sort(key=lambda x: x.confidence_score, reverse=True)
-        
-        return enhanced_keyframes
+            
+            print(f"SuperGlobal Reranking: {len(keyframes)} → {len(reranked_keyframes)} keyframes")
+            return reranked_keyframes
+            
+        except Exception as e:
+            print(f"Warning: SuperGlobal Reranking failed ({e}), falling back to simplified reranking")
+            
+            # Fallback to simplified reranking
+            enhanced_keyframes = []
+            
+            for kf in keyframes:
+                # Simplified reranking that combines original score with position
+                enhanced_score = kf.confidence_score * 1.1  # Slight boost for reranked items
+                
+                enhanced_kf = KeyframeServiceReponse(
+                    key=int(kf.key),
+                    video_num=safe_convert_video_num(kf.video_num),
+                    group_num=int(kf.group_num),
+                    keyframe_num=int(kf.keyframe_num),
+                    confidence_score=min(1.0, enhanced_score)  # Clamp to max 1.0
+                )
+                enhanced_keyframes.append(enhanced_kf)
+            
+            # Sort by enhanced scores
+            enhanced_keyframes.sort(key=lambda x: x.confidence_score, reverse=True)
+            
+            return enhanced_keyframes
     
     def _create_enhanced_moments(
         self,
@@ -421,6 +495,86 @@ class TemporalSearchService:
         
         return enhanced_moments
     
+    async def _refine_moments_with_abts(
+        self,
+        query: str,
+        moments: List[MomentCandidate],
+        all_keyframes: List[KeyframeServiceReponse]
+    ) -> List[MomentCandidate]:
+        """
+        Refine moment boundaries using ABTS algorithm
+        """
+        
+        if not self.abts or not moments:
+            return moments
+        
+        print(f"Applying ABTS boundary refinement to {len(moments)} moments...")
+        
+        refined_moments = []
+        
+        # Group keyframes by video for context
+        video_keyframes = {}
+        for kf in all_keyframes:
+            video_key = f"{kf.group_num}_{kf.video_num}"
+            if video_key not in video_keyframes:
+                video_keyframes[video_key] = []
+            video_keyframes[video_key].append(kf)
+        
+        for moment in moments:
+            try:
+                # Find the best keyframe in this moment as pivot
+                moment_keyframes = [
+                    kf for kf in all_keyframes
+                    if (kf.group_num == moment.group_num and 
+                        kf.video_num == moment.video_num and
+                        moment.keyframe_start <= kf.keyframe_num <= moment.keyframe_end)
+                ]
+                
+                if not moment_keyframes:
+                    refined_moments.append(moment)
+                    continue
+                
+                # Select pivot keyframe (highest confidence in moment)
+                pivot_keyframe = max(moment_keyframes, key=lambda x: x.confidence_score)
+                
+                # Get context keyframes for this video
+                video_key = f"{moment.group_num}_{moment.video_num}"
+                context_keyframes = video_keyframes.get(video_key, [])
+                
+                if len(context_keyframes) < 3:  # Need enough context
+                    refined_moments.append(moment)
+                    continue
+                
+                # Apply ABTS to find optimal boundaries
+                abts_result = await self.abts.find_optimal_boundaries(
+                    query=query,
+                    pivot_keyframe=pivot_keyframe,
+                    context_keyframes=context_keyframes,
+                    data_folder=self.data_folder
+                )
+                
+                # Update moment with refined boundaries
+                refined_moment = MomentCandidate(
+                    video_id=moment.video_id,
+                    group_num=moment.group_num,
+                    video_num=moment.video_num,
+                    keyframe_start=abts_result.start_frame,
+                    keyframe_end=abts_result.end_frame,
+                    start_time=abts_result.start_time,
+                    end_time=abts_result.end_time,
+                    confidence_score=abts_result.confidence_score,
+                    evidence_keyframes=moment.evidence_keyframes  # Keep original evidence
+                )
+                
+                refined_moments.append(refined_moment)
+                
+            except Exception as e:
+                print(f"Warning: ABTS refinement failed for moment {moment.video_id} ({e}), keeping original")
+                refined_moments.append(moment)
+        
+        print(f"ABTS refinement: {len(moments)} → {len(refined_moments)} moments")
+        return refined_moments
+    
     def _get_optimization_config(self, level: str) -> Dict[str, Any]:
         """Get optimization configuration based on performance level"""
         
@@ -462,6 +616,11 @@ class TemporalSearchService:
         return {
             "framework": "GRAB (Global Re-ranking and Adaptive Bidirectional search)",
             "optimization_level": "balanced",
+            "components_initialized": {
+                "superglobal_reranker": self.superglobal_reranker is not None,
+                "abts_algorithm": self.abts is not None,
+                "perceptual_deduplicator": self.deduplicator is not None
+            },
             "features": {
                 "shot_detection": self.optimization_config["enable_shot_detection"],
                 "deduplication": self.optimization_config["enable_deduplication"], 
@@ -475,10 +634,12 @@ class TemporalSearchService:
                 "search_window_seconds": self.optimization_config["search_window"] / 25.0
             },
             "capabilities": [
-                "Precise temporal boundary detection",
-                "Perceptual hash deduplication",
-                "GeM pooling feature refinement",
+                "Precise temporal boundary detection with ABTS",
+                "Perceptual hash deduplication with pHash",
+                "GeM pooling feature refinement (S1 + S2 scoring)",
                 "Adaptive bidirectional search",
-                "Temporal stability analysis"
-            ]
+                "Temporal stability analysis",
+                "SuperGlobal reranking with neighbor analysis"
+            ],
+            "implementation_status": "Full GRAB framework integration completed"
         }
