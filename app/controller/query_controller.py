@@ -18,7 +18,7 @@ from schema.response import KeyframeServiceReponse
 from schema.competition import MomentCandidate
 from agent.temporal_localization import TemporalLocalizer
 from agent.agent import VisualEventExtractor
-from agent.main_agent import apply_object_filter
+# from agent.main_agent import apply_object_filter
 from llama_index.core.llms import LLM
 from schema.agent import QueryRefineResponse
 from core.logger import SimpleLogger

@@ -114,8 +114,8 @@ class VisualEventExtractor:
     
     def __init__(self, llm: LLM):
         self.llm = llm
-        # Import enhanced competition prompts
-        from .enhanced_prompts import CompetitionPrompts
+        # Import competition prompts
+        from .prompts import CompetitionPrompts
         self.extraction_prompt = CompetitionPrompts.VCMR_VISUAL_EXTRACTION
 
     async def extract_visual_events(self, query: str) -> AgentResponse:
@@ -140,28 +140,40 @@ class VisualEventExtractor:
             Refined Query: {refined_query}
             
             Create variations that:
-            1. Focus on different visual aspects (objects, actions, settings)
-            2. Use alternative phrasings and synonyms
-            3. Vary in specificity (broader and more specific)
-            4. Consider temporal relationships and spatial arrangements
-            5. Include related concepts that might appear in the same scene
+            1. Focus on different visual aspects (objects, actions, settings) from the ORIGINAL query
+            2. Use alternative phrasings and synonyms that PRESERVE the original meaning
+            3. Vary in specificity but stay within the scope of what was actually described
+            4. Consider related concepts that might appear alongside the main elements
+            5. Maintain focus on what is VISUALLY OBSERVABLE in video frames
+            
+            CRITICAL RULES:
+            - DO NOT add details not present in the original query
+            - DO NOT specify settings, lighting, or environmental context unless mentioned
+            - DO NOT over-specify actions or add inferred details
+            - Focus on SEMANTIC EXPANSION, not DETAIL ADDITION
+            - Each variation should capture a different aspect of the SAME content
             
             Guidelines:
-            - Each variation should capture a different semantic aspect
-            - Maintain focus on visual, observable elements
-            - Consider what related content might appear alongside the main query
-            - Keep variations concise but descriptive
+            - Use synonyms and alternative phrasings
+            - Focus on different visual elements mentioned in the original
+            - Consider broader and more specific versions of the same concept
+            - Keep variations concise and focused on visual content
             
             Return 3-4 distinct query variations, each on a new line.
             Do not include the original or refined queries.
             
-            Example:
+            Example Good Variations:
             Original: "a woman places a picture and drives to store"
             Variations:
-            woman hanging artwork on wall indoor home setting
+            person handling picture frame object
+            woman driving vehicle transportation
+            picture frame placement activity
+            automobile movement to building
+            
+            Example Bad Variations (AVOID):
+            woman hanging framed picture on wall indoor home setting
             person driving car vehicle on road outdoor
-            female handling picture frame decoration object
-            automobile transportation moving to building location
+            (These add too many specific details not in the original)
             """
         )
         
@@ -182,7 +194,9 @@ class VisualEventExtractor:
                     # Remove numbering and bullet points
                     cleaned = line.lstrip('123456789.- ').strip()
                     if cleaned and len(cleaned) > 10:  # Valid query length
-                        variations.append(cleaned)
+                        # Additional validation: check if variation is not too specific
+                        if not self._is_over_specific(cleaned, original_query):
+                            variations.append(cleaned)
             
             # Ensure we have the original refined query and variations
             if refined_query not in variations:
@@ -193,6 +207,28 @@ class VisualEventExtractor:
         except Exception as e:
             print(f"Warning: Query variation generation failed: {e}")
             return [refined_query]  # Fallback to just refined query
+    
+    def _is_over_specific(self, variation: str, original_query: str) -> bool:
+        """Check if a variation adds too many specific details not in the original query"""
+        # List of over-specific terms that shouldn't be added unless in original
+        over_specific_terms = [
+            'indoor', 'outdoor', 'home', 'office', 'kitchen', 'bedroom', 'living room',
+            'road', 'street', 'highway', 'parking lot', 'garage', 'driveway',
+            'wall', 'ceiling', 'floor', 'table', 'desk', 'shelf',
+            'morning', 'afternoon', 'evening', 'night', 'daytime', 'nighttime',
+            'bright', 'dark', 'lighting', 'shadow', 'sunlight', 'artificial light',
+            'framed', 'hanging', 'mounted', 'displayed', 'positioned'
+        ]
+        
+        original_lower = original_query.lower()
+        variation_lower = variation.lower()
+        
+        # Check if variation contains over-specific terms not in original
+        for term in over_specific_terms:
+            if term in variation_lower and term not in original_lower:
+                return True
+        
+        return False
     
 
     # REMOVED: calculate_video_scores function - This function implemented the flawed "best video only" 

@@ -18,7 +18,7 @@ from llama_index.core.llms import LLM
 from llama_index.core import PromptTemplate
 from llama_index.core.llms import ChatMessage, ImageBlock, TextBlock, MessageRole
 
-from .enhanced_prompts import CompetitionPrompts
+from .prompts import CompetitionPrompts
 from .temporal_localization import TemporalLocalizer, ASRTemporalAligner
 from .performance_optimizer import PerformanceOptimizer, CompetitionModeOptimizer
 from service.search_service import KeyframeQueryService
@@ -234,7 +234,7 @@ class AdvancedVisualMatcher:
         return f"visual content from query clip {clip_path}"
 
 
-class EnhancedLLMReranker:
+class LLMReranker:
     """Sophisticated LLM-based reranking with actual parsing and reordering"""
     
     def __init__(self, llm: LLM):
@@ -259,6 +259,14 @@ class EnhancedLLMReranker:
             - Temporal context appropriateness
             - ASR text relevance
             - Object detection support
+            - Overall coherence and completeness
+            
+            Scoring Guidelines:
+            - 0.9-1.0: Perfect match with all query elements
+            - 0.7-0.8: Strong match with most query elements
+            - 0.5-0.6: Moderate match with some query elements
+            - 0.3-0.4: Weak match with few query elements
+            - 0.0-0.2: Poor match or irrelevant content
             
             Return JSON array with format:
             [
@@ -284,16 +292,21 @@ class EnhancedLLMReranker:
         if len(candidates) <= 1:
             return candidates
         
-        # Prepare candidate information
+        # Prepare candidate information with enhanced context
         candidates_info = []
         for i, candidate in enumerate(candidates):
+            # Enhanced context information
+            objects_info = ', '.join(candidate.detected_objects[:8]) if candidate.detected_objects else 'None detected'
+            asr_info = candidate.asr_text[:200] + '...' if candidate.asr_text and len(candidate.asr_text) > 200 else candidate.asr_text or 'No ASR'
+            
             info = f"""
             Candidate {i+1}:
             - Video: {candidate.video_id}
             - Time: {candidate.start_time:.1f}s - {candidate.end_time:.1f}s
             - Original Score: {candidate.confidence_score:.3f}
-            - Objects: {', '.join(candidate.detected_objects[:5]) if candidate.detected_objects else 'None'}
-            - ASR: {candidate.asr_text[:150] + '...' if candidate.asr_text and len(candidate.asr_text) > 150 else candidate.asr_text or 'None'}
+            - Detected Objects: {objects_info}
+            - ASR Text: {asr_info}
+            - Duration: {candidate.end_time - candidate.start_time:.1f}s
             """
             candidates_info.append(info.strip())
         
@@ -497,7 +510,7 @@ class AdvancedTemporalRefiner:
             return moment
 
 
-class EnhancedCompetitionAgent:
+class CompetitionAgent:
     """
      agent with advanced multimodal fusion and sophisticated processing
     """
@@ -523,7 +536,7 @@ class EnhancedCompetitionAgent:
         # Initialize  modules
         self.query_processor = AdvancedQueryProcessor(llm, model_service)
         self.visual_matcher = AdvancedVisualMatcher(model_service, data_folder)
-        self.llm_reranker = EnhancedLLMReranker(llm)
+        self.llm_reranker = LLMReranker(llm)
         self.temporal_refiner = AdvancedTemporalRefiner(self.temporal_localizer, self.asr_aligner)
         
         # Services
@@ -534,7 +547,7 @@ class EnhancedCompetitionAgent:
         # Interactive state management
         self.session_state: Dict[str, Dict[str, Any]] = {}
     
-    async def enhanced_vcmr_automatic(
+    async def vcmr_automatic(
         self, 
         request: VCMRAutomaticRequest
     ) -> VCMRAutomaticResponse:
@@ -582,7 +595,7 @@ class EnhancedCompetitionAgent:
             )
             
             # Stage 5: Create  moments with multimodal context
-            enhanced_moments = []
+            moments = []
             for cluster in moment_clusters:
                 moment = self.temporal_localizer.create_moment_from_keyframes(cluster)
                 
@@ -605,17 +618,17 @@ class EnhancedCompetitionAgent:
                     moment, request.query, "adaptive"
                 )
                 
-                enhanced_moments.append(refined_moment)
+                moments.append(refined_moment)
             
             # Stage 6: Advanced LLM reranking
-            if len(enhanced_moments) > 1:
+            if len(moments) > 1:
                 reranked_moments = await self.llm_reranker.rerank_candidates(
-                    request.query, enhanced_moments[:perf_settings["rerank_top_k"]]
+                    request.query, moments[:perf_settings["rerank_top_k"]]
                 )
                 # Combine reranked top results with remaining moments
-                final_moments = reranked_moments + enhanced_moments[len(reranked_moments):]
+                final_moments = reranked_moments + moments[len(reranked_moments):]
             else:
-                final_moments = enhanced_moments
+                final_moments = moments
             
             # Stage 7: Convert to competition format
             candidates = []
@@ -646,7 +659,7 @@ class EnhancedCompetitionAgent:
             # Fallback to basic search
             return await self._fallback_vcmr(request)
     
-    async def enhanced_video_qa(
+    async def video_qa(
         self, 
         request: VideoQARequest
     ) -> VideoQAResponse:
@@ -678,7 +691,7 @@ class EnhancedCompetitionAgent:
             )
             
             # Generate answer with  prompting
-            answer, confidence = await self._generate_enhanced_qa_answer(
+            answer, confidence = await self._generate_qa_answer(
                 request, visual_context, question_analysis
             )
             
@@ -703,7 +716,7 @@ class EnhancedCompetitionAgent:
                 confidence=0.0
             )
     
-    async def enhanced_kis_textual(
+    async def kis_textual(
         self, 
         request: KISTextualRequest
     ) -> KISResponse:
@@ -766,7 +779,7 @@ class EnhancedCompetitionAgent:
             print(f"Error in  KIS textual: {e}")
             raise ValueError(f"KIS textual search failed: {e}")
     
-    async def enhanced_kis_visual(
+    async def kis_visual(
         self, 
         request: KISVisualRequest
     ) -> KISResponse:
@@ -808,7 +821,7 @@ class EnhancedCompetitionAgent:
             print(f"Error in  KIS visual: {e}")
             raise ValueError(f"KIS visual search failed: {e}")
     
-    async def enhanced_kis_progressive(
+    async def kis_progressive(
         self, 
         request: KISProgressiveRequest,
         session_id: str,
@@ -1062,7 +1075,7 @@ class EnhancedCompetitionAgent:
         
         return visual_context
     
-    async def _generate_enhanced_qa_answer(
+    async def _generate_qa_answer(
         self, 
         request: VideoQARequest,
         visual_context: List[Dict[str, Any]],
@@ -1199,21 +1212,21 @@ class EnhancedCompetitionAgent:
         
         base_metrics = self.performance_optimizer.get_optimization_suggestions()
         
-        enhanced_metrics = {
+        metrics = {
             "session_count": len(self.session_state),
             "active_sessions": len([s for s in self.session_state.values() if s.get("search_history")]),
             "avg_hints_per_session": np.mean([len(s.get("all_hints", [])) for s in self.session_state.values()]) if self.session_state else 0
         }
         
-        base_metrics.update(enhanced_metrics)
+        base_metrics.update(metrics)
         return base_metrics
 
     async def vcmr_automatic(
         self, 
         request: VCMRAutomaticRequest
     ) -> VCMRAutomaticResponse:
-        """VCMR automatic - alias for enhanced_vcmr_automatic for compatibility"""
-        return await self.enhanced_vcmr_automatic(request)
+        """VCMR automatic - alias for vcmr_automatic for compatibility"""
+        return await self.vcmr_automatic(request)
 
     async def video_qa(
         self, 
@@ -1249,4 +1262,4 @@ class EnhancedCompetitionAgent:
 
 
 # Export the  agent as the main competition agent
-CompetitionAgent = EnhancedCompetitionAgent
+CompetitionAgent = CompetitionAgent

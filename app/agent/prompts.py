@@ -9,6 +9,34 @@ from llama_index.core import PromptTemplate
 class CompetitionPrompts:
     """Collection of optimized prompts for competition tasks"""
     
+    # Query Analysis for Adaptive Strategy
+    QUERY_ANALYSIS_PROMPT = PromptTemplate(
+        """
+        Bạn là một chuyên gia phân tích truy vấn tìm kiếm video. Hãy phân tích truy vấn của người dùng và trả về một cấu trúc JSON.
+
+        Danh sách các lớp đối tượng COCO có sẵn để tham khảo: {coco}
+
+        Truy vấn người dùng: "{query}"
+
+        Nhiệm vụ của bạn:
+        1.  **Phân loại truy vấn (query_type)**:
+            -   'object-centric': Nếu truy vấn tập trung chính vào việc tìm một hoặc nhiều đối tượng cụ thể (ví dụ: "tìm xe ô tô màu đỏ", "người đàn ông đội mũ bảo hiểm").
+            -   'action-centric': Nếu truy vấn mô tả một hành động hoặc sự kiện là chính (ví dụ: "người đang đi bộ qua đường", "hai người đang nói chuyện").
+            -   'scene-descriptive': Nếu truy vấn mô tả một cảnh quan hoặc bối cảnh chung (ví dụ: "cảnh hoàng hôn trên bãi biển", "đường phố đông đúc về đêm").
+            -   'abstract': Nếu truy vấn chứa các khái niệm trừu tượng, cảm xúc (ví dụ: "khoảnh khắc gia đình hạnh phúc", "một cuộc trò chuyện căng thẳng").
+
+        2.  **Trích xuất đối tượng khóa (key_objects)**:
+            -   Chỉ liệt kê các đối tượng **quan trọng nhất** và **có trong danh sách COCO** được cung cấp.
+            -   Nếu không có đối tượng nào rõ ràng hoặc truy vấn là trừu tượng, trả về một danh sách rỗng [].
+
+        3.  **Đánh giá yêu cầu ngữ cảnh (requires_contextual_understanding)**:
+            -   Trả về `true` nếu truy vấn thuộc loại 'action-centric', 'scene-descriptive', hoặc 'abstract'.
+            -   Trả về `false` nếu truy vấn chỉ đơn thuần là 'object-centric' và không có yếu tố phức tạp nào khác.
+
+        Chỉ trả về duy nhất một đối tượng JSON hợp lệ.
+        """
+    )
+    
     # Visual Event Extraction for VCMR
     VCMR_VISUAL_EXTRACTION = PromptTemplate(
         """
@@ -19,26 +47,36 @@ class CompetitionPrompts:
         Original Query: {query}
         
         Your task:
-        1. Extract key visual elements, actions, and temporal cues
-        2. Rephrase for optimal embedding search (focus on concrete, visual terms)
-        3. Identify relevant COCO objects that would help filter results
-        4. Consider temporal relationships and action sequences
+        1. Extract key visual elements, actions, and temporal cues from the ORIGINAL query
+        2. Create a refined query that PRESERVES the user's intent while optimizing for search
+        3. Generate semantic variations that EXPAND coverage without over-specifying
+        4. Identify relevant COCO objects ONLY if they are explicitly mentioned or clearly implied
         
-        Guidelines:
-        - Prioritize visual, observable elements over abstract concepts
-        - Include action verbs and spatial relationships
-        - Consider lighting, setting, and environmental context
-        - Extract person characteristics, object interactions, movement patterns
+        CRITICAL GUIDELINES:
+        - PRESERVE the user's original intent - do not add details not present in the query
+        - Focus on VISUAL elements that are observable in video frames
+        - Use the refined query as a SEARCH OPTIMIZATION, not a complete rewrite
+        - Generate variations that are SEMANTICALLY RELATED but not overly specific
+        - Only suggest objects that are EXPLICITLY mentioned or clearly implied
+        - Avoid "hallucinating" details like specific settings, lighting, or environmental context unless stated
+        
+        Example Good Approach:
+        Query: "a woman places a picture and drives to store"
+        Refined: "woman placing picture frame, person driving car"
+        Variations: 
+        - "person handling picture frame object"
+        - "woman driving vehicle transportation"
+        - "picture frame placement activity"
+        
+        Example Bad Approach (AVOID):
+        Query: "a woman places a picture and drives to store"
+        Refined: "woman hanging framed picture on wall indoor home setting, woman driving car vehicle outdoor road"
+        (This adds too many specific details not in the original query)
         
         Return:
-        - refined_query: Optimized search query (focus on visual semantics)
-        - list_of_objects: Relevant COCO objects for filtering (only if helpful for precision)
-        
-        Example:
-        Query: "A woman places a picture and drives to store"
-        Output: 
-        - refined_query: "woman hanging framed picture on wall indoor setting, woman driving car vehicle outdoor"
-        - list_of_objects: ["person", "car", "picture frame"] (if these help narrow results)
+        - refined_query: Optimized search query that preserves user intent
+        - list_of_objects: Relevant COCO objects (only if explicitly mentioned or clearly implied)
+        - query_variations: 3-4 semantic variations for comprehensive search coverage
         """
     )
     
@@ -213,6 +251,7 @@ class CompetitionPrompts:
     def get_prompt(cls, prompt_name: str) -> PromptTemplate:
         """Get a specific prompt by name"""
         prompt_mapping = {
+            "query_analysis": cls.QUERY_ANALYSIS_PROMPT,
             "vcmr_visual_extraction": cls.VCMR_VISUAL_EXTRACTION,
             "video_qa_answer": cls.VIDEO_QA_ANSWER,
             "kis_precision_search": cls.KIS_PRECISION_SEARCH,
