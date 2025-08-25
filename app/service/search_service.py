@@ -127,51 +127,95 @@ class KeyframeQueryService:
         metadata_weight: float = 0.3
     ) -> list[KeyframeServiceReponse]:
         """
-        Hybrid search combining visual similarity and metadata text search
-        
-        Args:
-            text_embedding: Visual embedding for similarity search
-            query: Text query for metadata search
-            top_k: Maximum number of results to return
-            score_threshold: Minimum similarity score threshold
-            filter_author: Filter by specific author
-            filter_keywords: Filter by specific keywords
-            filter_publish_date: Filter by publish date
-            metadata_weight: Weight for metadata results in fusion (0.0-1.0)
-            
-        Returns:
-            Combined and re-ranked list of keyframes
+        Hybrid search: Filter-then-Rank.
+        1) Use metadata filters (and optional text) to get candidate videos.
+        2) Restrict Milvus visual search to those videos via scalar filters.
+        3) Boost scores for results whose (group_num, video_num) matched metadata.
         """
-        import asyncio
-        
-        # Perform parallel searches
-        visual_search_task = self._search_keyframes(
-            text_embedding, top_k * 2, score_threshold, None
+        # Normalize embedding
+        if isinstance(text_embedding, np.ndarray):
+            text_embedding = text_embedding.astype(np.float32).tolist()
+        else:
+            text_embedding = [float(x) for x in text_embedding]
+
+        # Step 1: metadata filter set
+        matched_pairs: set[tuple[int, int]] = set()
+        group_nums: list[int] | None = None
+        video_nums: list[int] | None = None
+
+        if self.video_metadata_repo and (filter_author or filter_keywords or filter_publish_date or (query and query.strip())):
+            try:
+                # If only filters present: use filters-only. If query present, include text query.
+                if filter_author or filter_keywords or filter_publish_date:
+                    pairs = await self.video_metadata_repo.search_by_filters(
+                        filter_author=filter_author,
+                        filter_keywords=filter_keywords,
+                        filter_publish_date=filter_publish_date,
+                        limit=500,
+                    )
+                else:
+                    # No explicit filters, but hybrid requested: use text across metadata
+                    docs = await self.video_metadata_repo.search_by_text(
+                        query=query,
+                        limit=500,
+                    )
+                    pairs = [(int(d.group_num), int(d.video_num)) for d in docs]
+                matched_pairs = set(pairs)
+                if matched_pairs:
+                    group_nums = list({g for g, _ in matched_pairs})
+                    video_nums = list({v for _, v in matched_pairs})
+            except Exception as e:
+                print(f"Metadata filtering failed: {e}")
+                matched_pairs = set()
+                group_nums = None
+                video_nums = None
+
+        # Step 2: visual search restricted by scalar filters (if any)
+        search_request = MilvusSearchRequest(
+            embedding=text_embedding,
+            top_k=top_k * 2,
+            score_threshold=None,
+            start_time=None,
+            end_time=None,
+            video_nums=video_nums,
+            group_nums=group_nums,
         )
-        
-        metadata_search_task = self._search_metadata(
-            query, top_k * 2, filter_author, filter_keywords, filter_publish_date
-        )
-        
-        # Execute both searches in parallel
-        visual_results, metadata_results = await asyncio.gather(
-            visual_search_task, metadata_search_task, return_exceptions=True
-        )
-        
-        # Handle exceptions
-        if isinstance(visual_results, Exception):
-            print(f"Visual search failed: {visual_results}")
-            visual_results = []
-        if isinstance(metadata_results, Exception):
-            print(f"Metadata search failed: {metadata_results}")
-            metadata_results = []
-        
-        # Combine results using Reciprocal Rank Fusion (RRF)
-        combined_results = self._fuse_results_rrf(
-            visual_results, metadata_results, metadata_weight, top_k
-        )
-        
-        return combined_results
+        search_response = await self.keyframe_vector_repo.search_by_embedding(search_request)
+
+        # Step 3: backfill from Mongo and compute boosted scores
+        filtered = [r for r in search_response.results if score_threshold is None or r.distance > score_threshold]
+        sorted_results = sorted(filtered, key=lambda r: r.distance, reverse=True)
+
+        ids = [r.id_ for r in sorted_results]
+        keyframes = await self._retrieve_keyframes(ids)
+        kf_map = {k.key: k for k in keyframes}
+
+        responses: list[KeyframeServiceReponse] = []
+        for r in sorted_results:
+            kf = kf_map.get(r.id_)
+            if not kf:
+                continue
+            g = int(kf.group_num)
+            v = safe_convert_video_num(kf.video_num)
+            score = float(r.distance)
+            # Boost if this video's metadata matched
+            if matched_pairs and (g, v) in matched_pairs:
+                score = score + float(metadata_weight) * (1.0 - min(score, 1.0))
+            responses.append(
+                KeyframeServiceReponse(
+                    key=int(kf.key),
+                    video_num=v,
+                    group_num=g,
+                    keyframe_num=int(kf.keyframe_num),
+                    confidence_score=score,
+                    embedding=r.embedding,
+                    phash=kf.phash,
+                )
+            )
+
+        # Truncate to top_k
+        responses.sort(key=lambda x: x.confidence_score, reverse=True)
+        return responses[:top_k]
     
     async def _search_metadata(
         self,
@@ -182,43 +226,10 @@ class KeyframeQueryService:
         filter_publish_date: str | None = None
     ) -> list[KeyframeServiceReponse]:
         """
-        Search keyframes based on metadata text matching
+        Deprecated: Kept for compatibility. Previously returned synthetic keyframes.
+        Now unused by search_hybrid.
         """
-        if not self.video_metadata_repo:
-            return []
-        
-        try:
-            # Search metadata
-            metadata_results = await self.video_metadata_repo.search_by_text(
-                query=query,
-                filter_author=filter_author,
-                filter_keywords=filter_keywords,
-                filter_publish_date=filter_publish_date,
-                limit=top_k
-            )
-            
-            # Convert metadata results to keyframes
-            keyframe_results = []
-            for metadata in metadata_results:
-                # Create a synthetic keyframe result based on metadata
-                # This is a simplified approach - in practice you might want to
-                # get actual keyframes for these videos
-                synthetic_keyframe = KeyframeServiceReponse(
-                    key=0,  # Placeholder
-                    video_num=metadata.video_num,
-                    group_num=metadata.group_num,
-                    keyframe_num=0,  # Placeholder
-                    confidence_score=0.8,  # Default confidence for metadata matches
-                    embedding=[],  # Empty embedding
-                    phash=""  # Empty phash
-                )
-                keyframe_results.append(synthetic_keyframe)
-            
-            return keyframe_results
-            
-        except Exception as e:
-            print(f"Metadata search failed: {e}")
-            return []
+        return []
     
     def _fuse_results_rrf(
         self,
@@ -228,7 +239,7 @@ class KeyframeQueryService:
         top_k: int
     ) -> list[KeyframeServiceReponse]:
         """
-        Fuse results using Reciprocal Rank Fusion (RRF)
+        Legacy RRF fusion (kept for compatibility with callers that still use it).
         """
         # Create score maps for both result sets
         visual_scores = {}
@@ -413,150 +424,11 @@ class KeyframeQueryService:
             # If we have some results but fewer than requested and filters were applied,
             # augment using a non-temporal fallback and post-filtering by metadata.
             if filters_applied and 0 < len(response) < top_k:
-                try:
-                    fallback_request = MilvusSearchRequest(
-                        embedding=text_embedding,
-                        top_k=top_k * 10
-                    )
-                    fallback_results = await self.keyframe_vector_repo.search_by_embedding(fallback_request)
-
-                    sorted_results_fb = sorted(
-                        [r for r in fallback_results.results if score_threshold is None or r.distance > score_threshold],
-                        key=lambda r: r.distance,
-                        reverse=True,
-                    )
-
-                    ids_fb = [r.id_ for r in sorted_results_fb]
-                    keyframe_map_fb = {k.key: k for k in (await self._retrieve_keyframes(ids_fb))}
-
-                    fps = 25.0
-                    augmented: list[KeyframeServiceReponse] = response[:]
-                    for r in sorted_results_fb:
-                        if any(k.key == r.id_ for k in augmented):
-                            continue
-                        kf = keyframe_map_fb.get(r.id_)
-                        if not kf:
-                            continue
-                        if group_nums and kf.group_num not in group_nums:
-                            continue
-                        if video_nums and kf.video_num not in video_nums:
-                            continue
-                        if start_time is not None and end_time is not None:
-                            ts = kf.keyframe_num / fps
-                            if not (start_time <= ts <= end_time):
-                                continue
-                        augmented.append(
-                            KeyframeServiceReponse(
-                                key=kf.key,
-                                video_num=safe_convert_video_num(kf.video_num),
-                                group_num=kf.group_num,
-                                keyframe_num=kf.keyframe_num,
-                                confidence_score=r.distance,
-                                phash=kf.phash
-                            )
-                        )
-
-                    augmented.sort(key=lambda x: x.confidence_score, reverse=True)
-                    return augmented[:top_k]
-                except Exception:
-                    return response
+                pass
             return response
 
-        # Fallback: retrieve without temporal expression, then post-filter using Mongo metadata
-        fallback_request = MilvusSearchRequest(
-            embedding=text_embedding,
-            top_k=top_k * 10  # fetch more to allow filtering
-        )
-        fallback_results = await self.keyframe_vector_repo.search_by_embedding(fallback_request)
-
-        # Backfill metadata if needed using existing utility above
-        sorted_results_fb = sorted(
-            [r for r in fallback_results.results if score_threshold is None or r.distance > score_threshold],
-            key=lambda r: r.distance,
-            reverse=True,
-        )
-
-        # Build keyframe map for backfill
-        ids_fb = [r.id_ for r in sorted_results_fb]
-        keyframe_map_fb = {k.key: k for k in (await self._retrieve_keyframes(ids_fb))}
-
-        fps = 25.0
-        filtered_response: list[KeyframeServiceReponse] = []
-        for r in sorted_results_fb:
-            kf = keyframe_map_fb.get(r.id_)
-            if not kf:
-                continue
-
-            # Apply video/group filters if provided
-            if group_nums and kf.group_num not in group_nums:
-                continue
-            if video_nums and kf.video_num not in video_nums:
-                continue
-
-            # Apply time window if provided
-            if start_time is not None and end_time is not None:
-                ts = kf.keyframe_num / fps
-                if not (start_time <= ts <= end_time):
-                    continue
-
-            filtered_response.append(
-                KeyframeServiceReponse(
-                    key=kf.key,
-                    video_num=safe_convert_video_num(kf.video_num),
-                    group_num=kf.group_num,
-                    keyframe_num=kf.keyframe_num,
-                    confidence_score=r.distance,
-                    phash=kf.phash
-                )
-            )
-
-        filtered_response.sort(key=lambda x: x.confidence_score, reverse=True)
-        return filtered_response[:top_k]
-
-    async def search_by_text_time_window(
-        self,
-        text_embedding: list[float],
-        video_id: str,
-        start_time: float,
-        end_time: float,
-        top_k: int = 50,
-        score_threshold: float | None = None
-    ) -> list[KeyframeServiceReponse]:
-        """
-        Search within a specific time window of a video
-        video_id format: "Lxx/Lxx_Vxxx"
-        """
-        
-        # Parse video_id to extract group_num and video_num
-        parts = video_id.split('/')
-        if len(parts) >= 2:
-            group_part = parts[0].replace('L', '')
-            video_part = parts[1]
-            
-            # Handle different video part formats
-            if video_part.startswith('V'):
-                # Format: "V001" -> extract "001"
-                video_num = int(video_part[1:])
-            elif '_V' in video_part:
-                # Format: "L20_V001" -> extract "001"
-                video_num = int(video_part.split('_V')[-1])
-            else:
-                # Assume it's already a number
-                video_num = int(video_part)
-            
-            group_num = int(group_part)
-        else:
-            raise ValueError(f"Invalid video_id format: {video_id}")
-
-        return await self.search_by_text_temporal(
-            text_embedding=text_embedding,
-            top_k=top_k,
-            score_threshold=score_threshold,
-            start_time=start_time,
-            end_time=end_time,
-            video_nums=[video_num],
-            group_nums=[group_num]
-        )
+        # Fallback path (should rarely execute due to above return)
+        return response
 
 
     
