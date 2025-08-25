@@ -3,8 +3,7 @@ LLM-based Reranking Module
 Reusable component for intelligent reranking of search results
 """
 
-import numpy as np
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Any, Tuple
 from llama_index.core.llms import LLM
 from llama_index.core import PromptTemplate
 from schema.response import KeyframeServiceReponse

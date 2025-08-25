@@ -13,7 +13,6 @@ import json
 import asyncio
 import argparse
 import time
-import traceback
 
 
 from app.core.settings import MongoDBSettings

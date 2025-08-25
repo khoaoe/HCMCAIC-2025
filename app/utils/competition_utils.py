@@ -3,15 +3,12 @@ Utility functions for competition task processing
 Helper functions for data conversion, validation, and optimization
 """
 
-from typing import List, Dict, Any, Optional, Tuple
-import json
+from typing import List, Dict, Any, Tuple
 import re
-from pathlib import Path
-from typing import Dict, List, Any, Optional
-from collections import defaultdict
+import numpy as np
 
 from schema.response import KeyframeServiceReponse
-from schema.competition import VCMRCandidate, MomentCandidate
+from schema.competition import MomentCandidate
 
 
 from utils.common_utils import safe_convert_video_num

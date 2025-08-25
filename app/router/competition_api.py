@@ -6,7 +6,7 @@ Provides optimized endpoints for all competition tasks with advanced features
 import time
 from typing import Dict, Any, Optional, List
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, Body
-from fastapi.responses import JSONResponse
+# from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from controller.competition_controller import CompetitionController

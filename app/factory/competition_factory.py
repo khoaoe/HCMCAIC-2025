@@ -16,7 +16,7 @@ from router.competition_api import create_competition_router
 from service.search_service import KeyframeQueryService
 from service.model_service import ModelService
 from core.settings import AppSettings
-from core.settings import MongoDBSettings, KeyFrameIndexMilvusSetting
+from core.settings import KeyFrameIndexMilvusSetting
 from factory.factory import ServiceFactory
 from models.keyframe import Keyframe
 from core.settings import AppSettings

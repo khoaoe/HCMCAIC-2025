@@ -21,7 +21,6 @@ import re
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 from tqdm import tqdm
-import sys
 
 # Try to import pymilvus, but handle gracefully if not available
 try:

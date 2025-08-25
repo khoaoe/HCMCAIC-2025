@@ -1,7 +1,7 @@
 import os
 import asyncio
 from contextlib import asynccontextmanager
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware

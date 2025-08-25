@@ -7,7 +7,7 @@ ROOT_DIR = os.path.abspath(
 )
 sys.path.insert(0, ROOT_DIR)
 
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 from pathlib import Path
 import json
 

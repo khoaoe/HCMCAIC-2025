@@ -4,13 +4,10 @@ Implements GRAB framework's preprocessing stage for efficient temporal search
 """
 
 import numpy as np
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict
 from dataclasses import dataclass
-import cv2
 import imagehash
 from PIL import Image
-import os
-from pathlib import Path
 
 from schema.response import KeyframeServiceReponse
 

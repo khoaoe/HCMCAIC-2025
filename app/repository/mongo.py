@@ -12,7 +12,6 @@ ROOT_DIR = os.path.abspath(
 
 sys.path.insert(0, ROOT_DIR)
 
-from typing import Any
 from models.keyframe import Keyframe
 from common.repository import MongoBaseRepository
 from schema.interface import KeyframeInterface

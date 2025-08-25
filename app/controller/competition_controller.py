@@ -4,7 +4,6 @@ Provides optimized task routing and session management for all competition tasks
 """
 
 from typing import Dict, Any, Optional, List, Tuple
-import asyncio
 import time
 import uuid
 from pathlib import Path

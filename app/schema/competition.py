@@ -5,7 +5,7 @@ Implements exact input/output schemas as specified in the competition descriptio
 
 from pydantic import BaseModel, Field
 from pydantic.config import ConfigDict
-from typing import List, Optional, Dict, Any, Union
+from typing import List, Optional, Dict, Any
 
 
 # ===============================

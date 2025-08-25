@@ -4,10 +4,8 @@ Implements GRAB framework's precise temporal boundary detection
 """
 
 import numpy as np
-from typing import List, Dict, Tuple, Optional
-import asyncio
+from typing import List, Dict
 from dataclasses import dataclass
-import os
 
 from schema.response import KeyframeServiceReponse
 # from schema.competition import MomentCandidate

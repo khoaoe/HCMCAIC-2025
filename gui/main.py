@@ -1,8 +1,5 @@
 import streamlit as st
 import requests
-import base64
-from PIL import Image
-import io
 import os
 import sys
 

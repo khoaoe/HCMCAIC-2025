@@ -5,7 +5,7 @@ Reusable component for query analysis and expansion across different agents
 
 import json
 import re
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from llama_index.core.llms import LLM
 from llama_index.core import PromptTemplate
 from service.model_service import ModelService

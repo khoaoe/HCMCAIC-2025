@@ -1,5 +1,4 @@
 import torch
-import numpy as np
 from pymilvus import Collection, connections, FieldSchema, CollectionSchema, DataType, utility
 from typing import Optional
 from tqdm import tqdm

@@ -3,7 +3,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, Tuple
 import argparse
 from tqdm import tqdm
 

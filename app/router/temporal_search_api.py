@@ -6,7 +6,7 @@ Provides advanced temporal search endpoints for keyframe retrieval
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import List, Optional
 
-from schema.request import KeyframeSearchRequest
+# from schema.request import KeyframeSearchRequest
 from schema.response import KeyframeServiceReponse, SingleKeyframeDisplay, KeyframeDisplay
 from controller.query_controller import QueryController
 from core.dependencies import get_query_controller
