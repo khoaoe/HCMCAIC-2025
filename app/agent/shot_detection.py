@@ -15,7 +15,7 @@ from pathlib import Path
 from schema.response import KeyframeServiceReponse
 
 
-from utils.video_utils import safe_convert_video_num
+from utils.common_utils import safe_convert_video_num
 
 
 @dataclass

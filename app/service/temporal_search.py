@@ -20,9 +20,10 @@ from agent.temporal_localization import TemporalLocalizer
 from agent.superglobal_reranking import SuperGlobalReranker
 from agent.abts_algorithm import AdaptiveBidirectionalTemporalSearch
 from agent.shot_detection import PerceptualHashDeduplicator
+from core.settings import AppSettings
 
 
-from utils.video_utils import safe_convert_video_num
+from utils.common_utils import safe_convert_video_num
 
 
 class TemporalSearchService:
@@ -36,12 +37,16 @@ class TemporalSearchService:
         model_service: ModelService,
         data_folder: str,
         temporal_localizer: Optional[TemporalLocalizer] = None,
-        optimization_level: str = "balanced"  # "fast", "balanced", "precision"
+        optimization_level: str = "balanced",  # "fast", "balanced", "precision"
+        settings: Optional[AppSettings] = None
     ):
         self.keyframe_service = keyframe_service
         self.model_service = model_service
         self.data_folder = data_folder
         self.temporal_localizer = temporal_localizer or TemporalLocalizer()
+        
+        # Store settings for ABTS initialization
+        self.settings = settings
         
         # Configure optimization level
         self.optimization_config = self._get_optimization_config(optimization_level)
@@ -60,10 +65,7 @@ class TemporalSearchService:
         if self.optimization_config["enable_abts"]:
             self.abts = AdaptiveBidirectionalTemporalSearch(
                 model_service=self.model_service,
-                lambda_s=self.optimization_config["lambda_s"],
-                lambda_t=self.optimization_config["lambda_t"],
-                search_window=self.optimization_config["search_window"],
-                confidence_threshold=0.3
+                settings=self.settings
             )
         else:
             self.abts = None

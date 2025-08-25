@@ -11,7 +11,7 @@ from typing import Dict, List, Optional
 from pathlib import Path
 import json
 
-from agent.main_agent import KeyframeSearchAgent
+from agent.agent import VisualEventExtractor
 from service.search_service import KeyframeQueryService
 from service.model_service import ModelService
 from llama_index.core.llms import LLM
@@ -33,7 +33,7 @@ class AgentController:
         objects_data = objects_data or {}
         asr_data = asr_data or {}
 
-        self.agent = KeyframeSearchAgent(
+        self.agent = VisualEventExtractor(
             llm=llm,
             keyframe_service=keyframe_service,
             model_service=model_service,

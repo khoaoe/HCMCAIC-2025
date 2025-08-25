@@ -10,7 +10,7 @@ from schema.response import KeyframeServiceReponse
 from schema.competition import TemporalMapping, MomentCandidate
 from repository.video_metadata import VideoMetadataRepository
 
-from utils.video_utils import safe_convert_video_num
+from utils.common_utils import safe_convert_video_num
 
 
 class TemporalLocalizer:

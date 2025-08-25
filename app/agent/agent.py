@@ -11,7 +11,7 @@ from llama_index.core.llms import ChatMessage, ImageBlock, TextBlock, MessageRol
 
 
 
-from utils.video_utils import safe_convert_video_num
+from utils.common_utils import safe_convert_video_num
 
 
 

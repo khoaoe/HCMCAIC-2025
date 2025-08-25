@@ -16,7 +16,7 @@ from service import ModelService, KeyframeQueryService
 from service.temporal_search import TemporalSearchService
 from schema.response import KeyframeServiceReponse
 from schema.competition import MomentCandidate
-from agent.temporal_localization import TemporalLocalizer
+# from agent.temporal_localization import TemporalLocalizer
 from agent.agent import VisualEventExtractor
 # from agent.main_agent import apply_object_filter
 from llama_index.core.llms import LLM
@@ -35,7 +35,8 @@ class QueryController:
         model_service: ModelService,
         keyframe_service: KeyframeQueryService,
         llm: LLM | None = None,
-        objects_data: Dict | None = None
+        objects_data: Dict | None = None,
+        settings: Any = None
     ):
         self.data_folder = data_folder
         self.id2index = json.load(open(id2index_path, 'r'))
@@ -52,7 +53,8 @@ class QueryController:
             keyframe_service=keyframe_service,
             model_service=model_service,
             data_folder=str(data_folder),
-            optimization_level="balanced"
+            optimization_level="balanced",
+            settings=settings
         )
 
     async def _refine_query(self, query: str) -> tuple[str, list[str]]:

@@ -59,3 +59,17 @@ class AppSettings(BaseSettings):
     OPTIMIZATION_PROFILE: str = 'balanced'
 
 
+    # Defaults and algorithm parameters
+    DEFAULT_FPS: float = 25.0
+
+    # GRAB/ABTS Algorithm Parameters
+    ABTS_LAMBDA_S: float = 0.7
+    ABTS_LAMBDA_T: float = 0.3
+    ABTS_SEARCH_WINDOW: int = 75
+    ABTS_CONFIDENCE_THRESHOLD: float = 0.3
+
+    # LLM Configuration
+    LLM_MODEL_NAME: str = "gemini-2.5-flash-lite"
+    LLM_TEMPERATURE: float = 0.0
+    LLM_MAX_TOKENS: int = 1024
+    LLM_TIMEOUT: float = 30.0

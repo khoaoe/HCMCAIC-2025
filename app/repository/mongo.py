@@ -18,7 +18,7 @@ from common.repository import MongoBaseRepository
 from schema.interface import KeyframeInterface
 
 
-from utils.video_utils import safe_convert_video_num
+from utils.common_utils import safe_convert_video_num
 
 
 class KeyframeRepository(MongoBaseRepository[Keyframe]):

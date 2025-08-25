@@ -226,7 +226,8 @@ def get_query_controller(
             model_service=model_service,
             keyframe_service=keyframe_service,
             llm=get_llm(),
-            objects_data=objects_data
+            objects_data=objects_data,
+            settings=app_settings
         )
         
         logger.info("Query controller created successfully")

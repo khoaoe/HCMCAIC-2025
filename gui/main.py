@@ -12,7 +12,7 @@ sys.path.insert(0, ROOT_DIR)
 
 from app.core.settings import AppSettings
 
-from app.utils.video_utils import safe_convert_video_num
+from app.utils.common_utils import safe_convert_video_num
 
 # Page configuration
 st.set_page_config(

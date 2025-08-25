@@ -14,7 +14,7 @@ from schema.response import KeyframeServiceReponse
 from schema.competition import VCMRCandidate, MomentCandidate
 
 
-from app.utils.video_utils import safe_convert_video_num
+from utils.common_utils import safe_convert_video_num
 
 
 def validate_competition_output(task_type: str, output: Dict[str, Any]) -> bool:

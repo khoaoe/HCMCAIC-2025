@@ -11,7 +11,6 @@ from typing import Dict, Any, Optional, List
 from llama_index.core.llms import LLM
 # from llama_index.llms.openai import OpenAI
 
-from agent.competition_agent import CompetitionAgent
 from controller.competition_controller import CompetitionController
 from router.competition_api import create_competition_router
 from service.search_service import KeyframeQueryService
@@ -143,7 +142,7 @@ class CompetitionFactory:
         video_metadata_path: Optional[str] = None,
         objects_file_path: Optional[str] = None,
         asr_file_path: Optional[str] = None
-    ) -> CompetitionAgent:
+    ):
         """Create competition agent with all components"""
         
         # Initialize core services
@@ -159,8 +158,8 @@ class CompetitionFactory:
         data_folder = data_folder or self._get_default_data_folder()
         video_metadata_path = Path(video_metadata_path) if video_metadata_path else None
         
-        # Create agent
-        agent = CompetitionAgent(
+        # Create controller and return its agent to preserve previous API
+        controller = CompetitionController(
             llm=llm,
             keyframe_service=keyframe_service,
             model_service=model_service,
@@ -169,8 +168,8 @@ class CompetitionFactory:
             asr_data=asr_data,
             video_metadata_path=video_metadata_path
         )
-        
-        return agent
+
+        return controller.agent
     
     def create_controller(
         self,

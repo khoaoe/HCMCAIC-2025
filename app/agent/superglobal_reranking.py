@@ -112,16 +112,14 @@ Implements GRAB framework's reranking using Generalized Mean (GeM) pooling
 """
 
 import numpy as np
-from typing import List, Dict, Tuple, Optional
-import asyncio
-from concurrent.futures import ThreadPoolExecutor
-import os
+from typing import List, Dict
+
 
 from schema.response import KeyframeServiceReponse
 from service.model_service import ModelService
 
 
-from utils.video_utils import safe_convert_video_num
+from utils.common_utils import safe_convert_video_num   
 
 
 class GeMPooling:

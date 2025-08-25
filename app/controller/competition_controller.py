@@ -12,7 +12,7 @@ from pathlib import Path
 from fastapi import HTTPException
 from llama_index.core.llms import LLM
 
-from agent.competition_agent import CompetitionAgent
+from agent.competition_tasks import VCMRTaskProcessor
 from service.search_service import KeyframeQueryService
 from service.model_service import ModelService
 from schema.competition import (
@@ -22,8 +22,8 @@ from schema.competition import (
     VCMRFeedback, VCMRInteractiveCandidate,
     InteractiveSystemRequest, InteractiveLLMResponse
 )
-from core.settings import MongoDBSettings, KeyFrameIndexMilvusSetting
-from factory.factory import ServiceFactory
+# from core.settings import MongoDBSettings, KeyFrameIndexMilvusSetting
+# from factory.factory import ServiceFactory
 from models.keyframe import Keyframe
 
 
@@ -41,7 +41,7 @@ class CompetitionController:
         video_metadata_path: Optional[Path] = None
     ):
         # Initialize  agent
-        self.agent = CompetitionAgent(
+        self.agent = VCMRTaskProcessor(
             llm=llm,
             keyframe_service=keyframe_service,
             model_service=model_service,

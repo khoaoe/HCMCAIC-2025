@@ -6,11 +6,7 @@ Provides advanced temporal search endpoints for keyframe retrieval
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import List, Optional
 
-from schema.request import (
-    TextSearchWithTimeRangeRequest,
-    AdvancedTemporalSearchRequest,
-)
-from schema.competition import MomentCandidate
+from schema.request import KeyframeSearchRequest
 from schema.response import KeyframeServiceReponse, SingleKeyframeDisplay, KeyframeDisplay
 from controller.query_controller import QueryController
 from core.dependencies import get_query_controller
@@ -25,10 +21,10 @@ router = APIRouter(
 )
 
 
-from utils.video_utils import safe_convert_video_num
+from utils.common_utils import safe_convert_video_num
 
 
-@router.post(
+@router.get(
     "/search/time-range",
     response_model=KeyframeDisplay,
     summary="Text search with temporal filtering",
@@ -75,27 +71,37 @@ from utils.video_utils import safe_convert_video_num
     response_description="List of matching keyframes within the specified time range"
 )
 async def search_keyframes_time_range(
-    request: TextSearchWithTimeRangeRequest,
+    query: str = Query(..., description="Search text"),
+    start_time: float = Query(..., ge=0.0, description="Start time in seconds"),
+    end_time: float = Query(..., ge=0.0, description="End time in seconds (must be > start_time)"),
+    video_id: Optional[str] = Query(None, description="Optional video ID 'Lxx/Vxxx'"),
+    top_k: int = Query(10, ge=1, le=500),
+    score_threshold: float = Query(0.0, ge=0.0, le=1.0),
+    include_groups: Optional[List[int]] = Query(None),
+    include_videos: Optional[List[int]] = Query(None),
     controller: QueryController = Depends(get_query_controller)
 ):
     """Search for keyframes within a specific time range using temporal filtering."""
-    
-    logger.info(f"Temporal search request: query='{request.query}', time={request.start_time}-{request.end_time}s, video={request.video_id}")
-    
+
+    if end_time <= start_time:
+        raise HTTPException(status_code=400, detail="end_time must be greater than start_time")
+
+    logger.info(f"Temporal search request: query='{query}', time={start_time}-{end_time}s, video={video_id}")
+
     try:
         results = await controller.search_text_temporal(
-            query=request.query,
-            top_k=request.top_k,
-            score_threshold=request.score_threshold,
-            start_time=request.start_time,
-            end_time=request.end_time,
-            video_id=request.video_id,
-            include_groups=request.include_groups,
-            include_videos=request.include_videos
+            query=query,
+            top_k=top_k,
+            score_threshold=score_threshold,
+            start_time=start_time,
+            end_time=end_time,
+            video_id=video_id,
+            include_groups=include_groups,
+            include_videos=include_videos
         )
-        
-        logger.info(f"Found {len(results)} temporal search results for time range {request.start_time}-{request.end_time}s")
-        
+
+        logger.info(f"Found {len(results)} temporal search results for time range {start_time}-{end_time}s")
+
         display_results = list(
             map(
                 lambda pair: SingleKeyframeDisplay(path=pair[0], score=pair[1]),
@@ -103,7 +109,7 @@ async def search_keyframes_time_range(
             )
         )
         return KeyframeDisplay(results=display_results)
-        
+
     except Exception as e:
         logger.error(f"Temporal search failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Temporal search failed: {str(e)}")

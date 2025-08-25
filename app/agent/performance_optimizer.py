@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 
 from schema.response import KeyframeServiceReponse
-from schema.competition import MomentCandidate
+# from schema.competition import MomentCandidate
 
 
 class PerformanceOptimizer:

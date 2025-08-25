@@ -10,8 +10,9 @@ from dataclasses import dataclass
 import os
 
 from schema.response import KeyframeServiceReponse
-from schema.competition import MomentCandidate
+# from schema.competition import MomentCandidate
 from service.model_service import ModelService
+from core.settings import AppSettings
 from .shot_detection import TemporalStabilityAnalyzer
 
 
@@ -36,18 +37,14 @@ class AdaptiveBidirectionalTemporalSearch:
     def __init__(
         self,
         model_service: ModelService,
-        lambda_s: float = 0.7,  # Semantic similarity weight
-        lambda_t: float = 0.3,  # Temporal stability weight
-        search_window: int = 75,  # Frames to search in each direction (3 seconds at 25fps)
-        confidence_threshold: float = 0.3,
-        fps: float = 25.0
+        settings: AppSettings,
     ):
         self.model_service = model_service
-        self.lambda_s = lambda_s
-        self.lambda_t = lambda_t
-        self.search_window = search_window
-        self.confidence_threshold = confidence_threshold
-        self.fps = fps
+        self.lambda_s = settings.ABTS_LAMBDA_S
+        self.lambda_t = settings.ABTS_LAMBDA_T
+        self.search_window = settings.ABTS_SEARCH_WINDOW
+        self.confidence_threshold = settings.ABTS_CONFIDENCE_THRESHOLD
+        self.fps = settings.DEFAULT_FPS
         
         self.stability_analyzer = TemporalStabilityAnalyzer()
     
