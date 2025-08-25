@@ -148,6 +148,78 @@ with col1:
         top_k = st.slider("📊 Max Results", min_value=1, max_value=100, value=10)
     with col_param2:
         score_threshold = st.slider("🎯 Min Score", min_value=0.0, max_value=1.0, value=0.0, step=0.1)
+    
+    # Advanced Filters
+    with st.expander("🔧 Bộ lọc Nâng cao (Advanced Filters)", expanded=False):
+        
+        col_filter1, col_filter2 = st.columns(2)
+        
+        with col_filter1:
+            # Author filter
+            filter_author = st.text_input(
+                "👤 Author",
+                placeholder="e.g., 'Báo Tuổi Trẻ'",
+                help="Filter results by video author/creator"
+            )
+            
+            # Keywords filter
+            filter_keywords_input = st.text_input(
+                "🏷️ Keywords",
+                placeholder="e.g., 'tin tức, thời sự' (comma separated)",
+                help="Filter results by specific keywords (comma separated)"
+            )
+        
+        with col_filter2:
+            # Date range filter
+            st.markdown("📅 **Date Range**")
+            use_date_filter = st.checkbox("Enable date filtering", value=False)
+            
+            if use_date_filter:
+                col_date1, col_date2 = st.columns(2)
+                with col_date1:
+                    start_date = st.date_input(
+                        "From Date",
+                        help="Start date for filtering"
+                    )
+                with col_date2:
+                    end_date = st.date_input(
+                        "To Date", 
+                        help="End date for filtering"
+                    )
+            else:
+                start_date = None
+                end_date = None
+        
+        # Hybrid search options
+        st.markdown("**🔀 Hybrid Search Options**")
+        col_hybrid1, col_hybrid2 = st.columns(2)
+        
+        with col_hybrid1:
+            use_hybrid_search = st.checkbox(
+                "Enable Hybrid Search", 
+                value=False,
+                help="Combine visual similarity with metadata text search"
+            )
+        
+        with col_hybrid2:
+            metadata_weight = st.slider(
+                "Metadata Weight",
+                min_value=0.0,
+                max_value=1.0,
+                value=0.3,
+                step=0.1,
+                help="Weight for metadata results in hybrid search (0.0 = visual only, 1.0 = metadata only)"
+            )
+        
+        # Parse keywords if provided
+        filter_keywords = []
+        if filter_keywords_input.strip():
+            filter_keywords = [kw.strip() for kw in filter_keywords_input.split(',') if kw.strip()]
+        
+        # Format date for API if date filtering is enabled
+        filter_publish_date = None
+        if use_date_filter and start_date and end_date:
+            filter_publish_date = f"{start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}"
 
 with col2:
     # Search mode selector
@@ -361,6 +433,18 @@ if st.button("🚀 Search", use_container_width=True):
                         "top_k": top_k,
                         "score_threshold": score_threshold
                     }
+                    
+                    # Add advanced filters if any are provided
+                    if filter_author or filter_keywords or filter_publish_date or use_hybrid_search:
+                        if filter_author:
+                            payload["filter_author"] = filter_author
+                        if filter_keywords:
+                            payload["filter_keywords"] = filter_keywords
+                        if filter_publish_date:
+                            payload["filter_publish_date"] = filter_publish_date
+                        if use_hybrid_search:
+                            payload["use_hybrid_search"] = True
+                            payload["metadata_weight"] = metadata_weight
                 
                 elif search_mode == "Exclude Groups":
                     endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe/search/exclude-groups"
@@ -370,6 +454,18 @@ if st.button("🚀 Search", use_container_width=True):
                         "score_threshold": score_threshold,
                         "exclude_groups": exclude_groups
                     }
+                    
+                    # Add advanced filters if any are provided
+                    if filter_author or filter_keywords or filter_publish_date or use_hybrid_search:
+                        if filter_author:
+                            payload["filter_author"] = filter_author
+                        if filter_keywords:
+                            payload["filter_keywords"] = filter_keywords
+                        if filter_publish_date:
+                            payload["filter_publish_date"] = filter_publish_date
+                        if use_hybrid_search:
+                            payload["use_hybrid_search"] = True
+                            payload["metadata_weight"] = metadata_weight
                 
                 elif search_mode == "Temporal Search":
                     endpoint = f"{st.session_state.api_base_url}/api/v1/temporal/search/time-range"
@@ -551,6 +647,18 @@ if st.button("🚀 Search", use_container_width=True):
                         "include_groups": include_groups,
                         "include_videos": include_videos
                     }
+                    
+                    # Add advanced filters if any are provided
+                    if filter_author or filter_keywords or filter_publish_date or use_hybrid_search:
+                        if filter_author:
+                            payload["filter_author"] = filter_author
+                        if filter_keywords:
+                            payload["filter_keywords"] = filter_keywords
+                        if filter_publish_date:
+                            payload["filter_publish_date"] = filter_publish_date
+                        if use_hybrid_search:
+                            payload["use_hybrid_search"] = True
+                            payload["metadata_weight"] = metadata_weight
                 
                 
                 # POST request
@@ -585,6 +693,23 @@ if st.button("🚀 Search", use_container_width=True):
 if st.session_state.search_results:
     st.markdown("---")
     st.markdown("## 📋 Search Results")
+    
+    # Show active filters if any were used
+    active_filters = []
+    if filter_author:
+        active_filters.append(f"👤 Author: {filter_author}")
+    if filter_keywords:
+        active_filters.append(f"🏷️ Keywords: {', '.join(filter_keywords)}")
+    if filter_publish_date:
+        active_filters.append(f"📅 Date: {filter_publish_date}")
+    if use_hybrid_search:
+        active_filters.append(f"🔀 Hybrid Search (weight: {metadata_weight})")
+    
+    if active_filters:
+        st.markdown("### 🔧 Active Filters")
+        for filter_info in active_filters:
+            st.markdown(f"- {filter_info}")
+        st.markdown("---")
         
     # Results summary
     col_metric1, col_metric2, col_metric3 = st.columns(3)

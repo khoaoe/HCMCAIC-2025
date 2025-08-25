@@ -4,6 +4,7 @@ Implements exact input/output schemas as specified in the competition descriptio
 """
 
 from pydantic import BaseModel, Field
+from pydantic.config import ConfigDict
 from typing import List, Optional, Dict, Any, Union
 
 
@@ -190,8 +191,7 @@ class TemporalMapping(BaseModel):
     title: Optional[str] = None
     watch_url: Optional[str] = None
     
-    class Config:
-        extra = "allow"  # Allow additional fields not defined in the schema
+    model_config = ConfigDict(extra="allow")  # Allow additional fields not defined in the schema
 
 
 class MomentCandidate(BaseModel):

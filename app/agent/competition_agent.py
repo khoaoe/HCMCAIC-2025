@@ -32,6 +32,7 @@ from schema.competition import (
     KISVisualRequest, KISTextualRequest, KISProgressiveRequest, KISResponse,
     VCMRFeedback, VCMRInteractiveCandidate
 )
+from repository.video_metadata import VideoMetadataRepository
 
 from utils.video_utils import safe_convert_video_num
 
@@ -212,13 +213,17 @@ class CompetitionAgent:
         data_folder: str,
         objects_data: Dict[str, List[str]],
         asr_data: Dict[str, Any],
-        video_metadata_path: Optional[Path] = None
+        video_metadata_path: Optional[Path] = None,
+        video_metadata_repository: Optional[VideoMetadataRepository] = None
     ):
         self.llm = llm
         self.data_folder = data_folder
         
         # Initialize core modules
-        self.temporal_localizer = TemporalLocalizer(video_metadata_path)
+        self.temporal_localizer = TemporalLocalizer(
+            video_metadata_repository=video_metadata_repository,
+            video_metadata_path=video_metadata_path
+        )
         self.asr_aligner = ASRTemporalAligner(asr_data)
         self.performance_optimizer = PerformanceOptimizer()
         
@@ -232,6 +237,7 @@ class CompetitionAgent:
         self.keyframe_service = keyframe_service
         self.model_service = model_service
         self.objects_data = objects_data
+        self.video_metadata_repository = video_metadata_repository
         
         # Interactive state management
         self.session_state: Dict[str, Dict[str, Any]] = {}
@@ -309,10 +315,15 @@ class CompetitionAgent:
                 
                 moments.append(refined_moment)
             
-            # Stage 6: LLM reranking
+            # Stage 6: Enhance moments with metadata context for better LLM reranking
             if len(moments) > 1:
+                # Add metadata context to moments before reranking
+                enhanced_moments = await self._enhance_moments_with_metadata(
+                    moments[:perf_settings["rerank_top_k"]]
+                )
+                
                 reranked_moments = await self.llm_reranker.rerank_candidates(
-                    request.query, moments[:perf_settings["rerank_top_k"]]
+                    request.query, enhanced_moments
                 )
                 # Combine reranked top results with remaining moments
                 final_moments = reranked_moments + moments[len(reranked_moments):]
@@ -909,6 +920,60 @@ class CompetitionAgent:
         
         base_metrics.update(metrics)
         return base_metrics
+    
+    async def _enhance_moments_with_metadata(
+        self, 
+        moments: List[MomentCandidate]
+    ) -> List[MomentCandidate]:
+        """
+        Enhance moments with video metadata context for better LLM reranking
+        
+        Args:
+            moments: List of moment candidates to enhance
+            
+        Returns:
+            Enhanced moments with metadata context
+        """
+        if not self.video_metadata_repository:
+            return moments
+        
+        try:
+            enhanced_moments = []
+            
+            for moment in moments:
+                # Extract video_id from moment
+                video_id = moment.video_id
+                
+                # Get metadata for this video
+                metadata = await self.video_metadata_repository.get_by_video_id(video_id)
+                
+                if metadata:
+                    # Create enhanced context string
+                    metadata_context = f"""
+                    Video Title: {metadata.title}
+                    Video Description: {metadata.description}
+                    Author: {metadata.author}
+                    Keywords: {', '.join(metadata.keywords)}
+                    Publish Date: {metadata.publish_date}
+                    Duration: {metadata.duration:.2f} seconds
+                    """
+                    
+                    # Add metadata context to moment
+                    moment.metadata_context = metadata_context
+                    
+                    # Also add to ASR text if available for richer context
+                    if hasattr(moment, 'asr_text') and moment.asr_text:
+                        moment.asr_text = f"{metadata_context}\n\nASR Transcript: {moment.asr_text}"
+                    else:
+                        moment.asr_text = metadata_context
+                
+                enhanced_moments.append(moment)
+            
+            return enhanced_moments
+            
+        except Exception as e:
+            print(f"Warning: Failed to enhance moments with metadata: {e}")
+            return moments
 
     async def vcmr_automatic(
         self, 

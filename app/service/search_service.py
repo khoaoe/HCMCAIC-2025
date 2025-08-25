@@ -12,6 +12,7 @@ sys.path.insert(0, ROOT_DIR)
 from repository.milvus import KeyframeVectorRepository
 from repository.milvus import MilvusSearchRequest
 from repository.mongo import KeyframeRepository
+from repository.video_metadata import VideoMetadataRepository
 
 from schema.response import KeyframeServiceReponse
 
@@ -24,11 +25,12 @@ class KeyframeQueryService:
             self, 
             keyframe_vector_repo: KeyframeVectorRepository,
             keyframe_mongo_repo: KeyframeRepository,
-            
+            video_metadata_repo: VideoMetadataRepository = None,
         ):
 
         self.keyframe_vector_repo = keyframe_vector_repo
         self.keyframe_mongo_repo= keyframe_mongo_repo
+        self.video_metadata_repo = video_metadata_repo
 
 
     async def _retrieve_keyframes(self, ids: list[int]):
@@ -111,7 +113,159 @@ class KeyframeQueryService:
         top_k: int,
         score_threshold: float | None = 0.5,
     ):
-        return await self._search_keyframes(text_embedding, top_k, score_threshold, None)   
+        return await self._search_keyframes(text_embedding, top_k, score_threshold, None)
+    
+    async def search_hybrid(
+        self,
+        text_embedding: list[float],
+        query: str,
+        top_k: int = 100,
+        score_threshold: float | None = 0.5,
+        filter_author: str | None = None,
+        filter_keywords: list[str] | None = None,
+        filter_publish_date: str | None = None,
+        metadata_weight: float = 0.3
+    ) -> list[KeyframeServiceReponse]:
+        """
+        Hybrid search combining visual similarity and metadata text search
+        
+        Args:
+            text_embedding: Visual embedding for similarity search
+            query: Text query for metadata search
+            top_k: Maximum number of results to return
+            score_threshold: Minimum similarity score threshold
+            filter_author: Filter by specific author
+            filter_keywords: Filter by specific keywords
+            filter_publish_date: Filter by publish date
+            metadata_weight: Weight for metadata results in fusion (0.0-1.0)
+            
+        Returns:
+            Combined and re-ranked list of keyframes
+        """
+        import asyncio
+        
+        # Perform parallel searches
+        visual_search_task = self._search_keyframes(
+            text_embedding, top_k * 2, score_threshold, None
+        )
+        
+        metadata_search_task = self._search_metadata(
+            query, top_k * 2, filter_author, filter_keywords, filter_publish_date
+        )
+        
+        # Execute both searches in parallel
+        visual_results, metadata_results = await asyncio.gather(
+            visual_search_task, metadata_search_task, return_exceptions=True
+        )
+        
+        # Handle exceptions
+        if isinstance(visual_results, Exception):
+            print(f"Visual search failed: {visual_results}")
+            visual_results = []
+        if isinstance(metadata_results, Exception):
+            print(f"Metadata search failed: {metadata_results}")
+            metadata_results = []
+        
+        # Combine results using Reciprocal Rank Fusion (RRF)
+        combined_results = self._fuse_results_rrf(
+            visual_results, metadata_results, metadata_weight, top_k
+        )
+        
+        return combined_results
+    
+    async def _search_metadata(
+        self,
+        query: str,
+        top_k: int,
+        filter_author: str | None = None,
+        filter_keywords: list[str] | None = None,
+        filter_publish_date: str | None = None
+    ) -> list[KeyframeServiceReponse]:
+        """
+        Search keyframes based on metadata text matching
+        """
+        if not self.video_metadata_repo:
+            return []
+        
+        try:
+            # Search metadata
+            metadata_results = await self.video_metadata_repo.search_by_text(
+                query=query,
+                filter_author=filter_author,
+                filter_keywords=filter_keywords,
+                filter_publish_date=filter_publish_date,
+                limit=top_k
+            )
+            
+            # Convert metadata results to keyframes
+            keyframe_results = []
+            for metadata in metadata_results:
+                # Create a synthetic keyframe result based on metadata
+                # This is a simplified approach - in practice you might want to
+                # get actual keyframes for these videos
+                synthetic_keyframe = KeyframeServiceReponse(
+                    key=0,  # Placeholder
+                    video_num=metadata.video_num,
+                    group_num=metadata.group_num,
+                    keyframe_num=0,  # Placeholder
+                    confidence_score=0.8,  # Default confidence for metadata matches
+                    embedding=[],  # Empty embedding
+                    phash=""  # Empty phash
+                )
+                keyframe_results.append(synthetic_keyframe)
+            
+            return keyframe_results
+            
+        except Exception as e:
+            print(f"Metadata search failed: {e}")
+            return []
+    
+    def _fuse_results_rrf(
+        self,
+        visual_results: list[KeyframeServiceReponse],
+        metadata_results: list[KeyframeServiceReponse],
+        metadata_weight: float,
+        top_k: int
+    ) -> list[KeyframeServiceReponse]:
+        """
+        Fuse results using Reciprocal Rank Fusion (RRF)
+        """
+        # Create score maps for both result sets
+        visual_scores = {}
+        metadata_scores = {}
+        
+        # Process visual results
+        for i, result in enumerate(visual_results):
+            video_key = f"{result.group_num}_{result.video_num}_{result.keyframe_num}"
+            visual_scores[video_key] = 1.0 / (60 + i)  # RRF formula with k=60
+        
+        # Process metadata results
+        for i, result in enumerate(metadata_results):
+            video_key = f"{result.group_num}_{result.video_num}_{result.keyframe_num}"
+            metadata_scores[video_key] = metadata_weight * (1.0 / (60 + i))
+        
+        # Combine scores
+        combined_scores = {}
+        all_keys = set(visual_scores.keys()) | set(metadata_scores.keys())
+        
+        for key in all_keys:
+            visual_score = visual_scores.get(key, 0.0)
+            metadata_score = metadata_scores.get(key, 0.0)
+            combined_scores[key] = visual_score + metadata_score
+        
+        # Sort by combined score
+        sorted_keys = sorted(combined_scores.keys(), key=lambda k: combined_scores[k], reverse=True)
+        
+        # Reconstruct results
+        result_map = {f"{r.group_num}_{r.video_num}_{r.keyframe_num}": r for r in visual_results}
+        result_map.update({f"{r.group_num}_{r.video_num}_{r.keyframe_num}": r for r in metadata_results})
+        
+        fused_results = []
+        for key in sorted_keys[:top_k]:
+            if key in result_map:
+                fused_results.append(result_map[key])
+        
+        return fused_results   
     
 
     async def search_by_text_range(

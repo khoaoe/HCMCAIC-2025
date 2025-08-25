@@ -165,6 +165,41 @@ class QueryController:
                 pass
         return result
 
+    async def search_hybrid(
+        self,
+        query: str,
+        top_k: int,
+        score_threshold: float,
+        filter_author: str | None = None,
+        filter_keywords: list[str] | None = None,
+        filter_publish_date: str | None = None,
+        metadata_weight: float = 0.3
+    ):
+        """
+        Hybrid search combining visual similarity and metadata text search
+        """
+        refined_query, suggested_objects = await self._refine_query(query)
+        embedding = self.model_service.embedding(refined_query).tolist()[0]
+        
+        result = await self.keyframe_service.search_hybrid(
+            text_embedding=embedding,
+            query=refined_query,
+            top_k=top_k,
+            score_threshold=score_threshold,
+            filter_author=filter_author,
+            filter_keywords=filter_keywords,
+            filter_publish_date=filter_publish_date,
+            metadata_weight=metadata_weight
+        )
+        
+        # Optional object filtering when objects data is available
+        if suggested_objects and self.objects_data:
+            try:
+                result = apply_object_filter(result, self.objects_data, suggested_objects) or result
+            except Exception:
+                pass
+        
+        return result
 
     async def search_text_with_exlude_group(
         self,

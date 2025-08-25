@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from schema.response import KeyframeServiceReponse
 from schema.competition import TemporalMapping, MomentCandidate
-
+from repository.video_metadata import VideoMetadataRepository
 
 from utils.video_utils import safe_convert_video_num
 
@@ -18,14 +18,58 @@ class TemporalLocalizer:
     
     def __init__(
         self, 
+        video_metadata_repository: Optional[VideoMetadataRepository] = None,
         video_metadata_path: Optional[Path] = None,
         default_fps: float = 25.0
     ):
         self.default_fps = default_fps
         self.video_metadata: Dict[str, TemporalMapping] = {}
+        self.video_metadata_repository = video_metadata_repository
         
-        if video_metadata_path and video_metadata_path.exists():
+        # Load metadata from database if repository is provided
+        if video_metadata_repository:
+            # Note: This will be called asynchronously in load_metadata_from_db()
+            pass
+        elif video_metadata_path and video_metadata_path.exists():
             self._load_video_metadata(video_metadata_path)
+    
+    async def load_metadata_from_db(self):
+        """Load video metadata from MongoDB database"""
+        if not self.video_metadata_repository:
+            print("Warning: No video metadata repository provided")
+            return
+        
+        try:
+            # Get all video metadata from database
+            all_metadata = await self.video_metadata_repository.get_all()
+            
+            for metadata in all_metadata:
+                # Create video key for metadata lookup
+                if metadata.group_num < 21:
+                    video_key = f"L{str(metadata.group_num):0>2s}/V{str(metadata.video_num):0>3s}"
+                else:
+                    video_key = f"L{str(metadata.group_num):0>2s}/L{str(metadata.group_num):0>2s}_V{str(metadata.video_num):0>3s}"
+                
+                # Create TemporalMapping object from VideoMetadata
+                temporal_mapping = TemporalMapping(
+                    group_num=metadata.group_num,
+                    video_num=metadata.video_num,
+                    title=metadata.title,
+                    description=metadata.description,
+                    keywords=metadata.keywords,
+                    author=metadata.author,
+                    publish_date=metadata.publish_date,
+                    duration=metadata.duration,
+                    total_frames=metadata.total_frames,
+                    fps=metadata.fps
+                )
+                
+                self.video_metadata[video_key] = temporal_mapping
+            
+            print(f"Successfully loaded metadata for {len(self.video_metadata)} videos from database")
+            
+        except Exception as e:
+            print(f"Warning: Could not load video metadata from database: {e}")
     
     def _load_video_metadata(self, metadata_path: Path):
         """Load video metadata including duration, fps, etc."""

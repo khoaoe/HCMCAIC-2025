@@ -9,6 +9,7 @@ dependencies = [
     "beanie>=2.0.0",
     "dotenv>=0.9.9",
     "fastapi[standard]>=0.116.1",
+    "ffmpeg>=1.4",
     "httpx>=0.28.1",
     "imagehash>=4.3.2",
     "ipykernel>=6.30.0",

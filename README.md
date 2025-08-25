@@ -19,7 +19,7 @@ A FastAPI-based AI application powered by Milvus for vector search, MongoDB for 
 ```bash
 pip install uv
 uv init --python=3.10
-uv add aiofiles beanie dotenv fastapi[standard] httpx ipykernel motor nicegui numpy open-clip-torch pydantic-settings pymilvus streamlit torch typing-extensions usearch uvicorn
+uv add aiofiles beanie dotenv fastapi[standard] httpx ipykernel motor nicegui numpy open-clip-torch pydantic-settings pymilvus streamlit torch typing-extensions usearch uvicorn ffmpeg
 ```
 
 2. Activate .venv
@@ -42,6 +42,10 @@ python migration/npy_embedding_migration.py --folder_path resources\embeddings
 ...
 # for keyframes indexing
 python migration/keyframe_migration.py --file_path resources\keyframes\id2index.json
+# perceptual hash migration for "GRAB Search" mode
+python migration/phash_migration.py 
+# metadata
+python migration\metadata_migration.py
 ```
 
 

@@ -10,8 +10,12 @@ class BaseSearchRequest(BaseModel):
 
 
 class TextSearchRequest(BaseSearchRequest):
-    """Simple text search request"""
-    pass
+    """Simple text search request with optional metadata filters"""
+    filter_author: Optional[str] = Field(None, description="Filter by specific author")
+    filter_keywords: Optional[List[str]] = Field(None, description="Filter by specific keywords")
+    filter_publish_date: Optional[str] = Field(None, description="Filter by publish date")
+    use_hybrid_search: bool = Field(default=False, description="Enable hybrid search combining visual and metadata")
+    metadata_weight: float = Field(default=0.3, ge=0.0, le=1.0, description="Weight for metadata results in hybrid search")
 
 
 class TextSearchWithExcludeGroupsRequest(BaseSearchRequest):

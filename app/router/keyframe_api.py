@@ -65,11 +65,23 @@ async def search_keyframes(
     
     logger.info(f"Text search request: query='{request.query}', top_k={request.top_k}, threshold={request.score_threshold}")
     
-    results = await controller.search_text(
-        query=request.query,
-        top_k=request.top_k,
-        score_threshold=request.score_threshold
-    )
+    # Use hybrid search if enabled and filters are provided
+    if request.use_hybrid_search or any([request.filter_author, request.filter_keywords, request.filter_publish_date]):
+        results = await controller.search_hybrid(
+            query=request.query,
+            top_k=request.top_k,
+            score_threshold=request.score_threshold,
+            filter_author=request.filter_author,
+            filter_keywords=request.filter_keywords,
+            filter_publish_date=request.filter_publish_date,
+            metadata_weight=request.metadata_weight
+        )
+    else:
+        results = await controller.search_text(
+            query=request.query,
+            top_k=request.top_k,
+            score_threshold=request.score_threshold
+        )
     
     logger.info(f"Found {len(results)} results for query: '{request.query}'")
     display_results = list(
