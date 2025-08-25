@@ -275,10 +275,15 @@ class CompetitionAgent:
                     embedding = self.model_service.embedding(search_query).tolist()[0]
                     self.performance_optimizer.cache_embedding(search_query, embedding)
                 
-                keyframes = await self.keyframe_service.search_by_text(
+                keyframes = await self.keyframe_service.search_hybrid(
                     text_embedding=embedding,
-                    top_k=perf_settings["initial_top_k"],
-                    score_threshold=perf_settings["score_threshold"]
+                    query=search_query,
+                    top_k=perf_settings["initial_top_k"] * 5,
+                    score_threshold=perf_settings["score_threshold"],
+                    filter_author=getattr(request, "filter_author", None),
+                    filter_keywords=getattr(request, "filter_keywords", None),
+                    filter_publish_date=getattr(request, "filter_publish_date", None),
+                    metadata_weight=getattr(request, "metadata_weight", 0.3)
                 )
                 
                 all_keyframes.extend(keyframes)

@@ -53,15 +53,8 @@ class TemporalSearchService:
         """Initialize GRAB framework components"""
         
         # Initialize SuperGlobal Reranker
-        if self.optimization_config["enable_superglobal_reranking"]:
-            self.superglobal_reranker = SuperGlobalReranker(
-                model_service=self.model_service,
-                neighbor_k=10,  # Number of neighbors for feature refinement
-                lambda_s1=0.5,  # Weight for S1 (original query vs refined DB)
-                lambda_s2=0.5   # Weight for S2 (expanded query vs original DB)
-            )
-        else:
-            self.superglobal_reranker = None
+        # Defer initialization until we have candidate embeddings
+        self.superglobal_reranker = None
         
         # Initialize ABTS for boundary refinement
         if self.optimization_config["enable_abts"]:
@@ -390,47 +383,54 @@ class TemporalSearchService:
         query: str,
         keyframes: List[KeyframeServiceReponse]
     ) -> List[KeyframeServiceReponse]:
-        """Apply SuperGlobal reranking"""
-        
-        if not self.superglobal_reranker or len(keyframes) <= 1:
+        """Apply SuperGlobal reranking using current candidate embeddings."""
+        if len(keyframes) <= 1:
             return keyframes
-        
+
         print(f"Applying SuperGlobal Reranking to {len(keyframes)} keyframes...")
-        
+
         try:
-            # Use actual SuperGlobalReranker with GeM pooling
-            reranked_keyframes = await self.superglobal_reranker.rerank_keyframes(
-                query=query,
-                keyframes=keyframes
+            import numpy as np
+
+            # Prepare embeddings and ids
+            all_embeddings = np.array([kf.embedding for kf in keyframes], dtype=np.float32)
+            all_ids = [str(kf.key) for kf in keyframes]
+
+            # Initialize reranker on-demand
+            self.superglobal_reranker = SuperGlobalReranker(
+                all_embeddings=all_embeddings,
+                all_ids=all_ids,
+                k_neighbors=10,
             )
-            
-            print(f"SuperGlobal Reranking: {len(keyframes)} → {len(reranked_keyframes)} keyframes")
-            return reranked_keyframes
-            
+
+            # Build candidate dicts compatible with reranker
+            candidates = [
+                {
+                    'id': str(kf.key),
+                    'score': float(kf.confidence_score)
+                }
+                for kf in keyframes
+            ]
+
+            # Compute query embedding
+            query_emb = self.model_service.embedding(query).astype(np.float32).reshape(-1)
+
+            reranked = self.superglobal_reranker.rerank(query_emb, candidates)
+
+            # Map back to KeyframeServiceReponse order with updated scores
+            id_to_kf = {str(kf.key): kf for kf in keyframes}
+            reordered: list[KeyframeServiceReponse] = []
+            for item in reranked:
+                kf = id_to_kf.get(item['id'])
+                if not kf:
+                    continue
+                kf.confidence_score = float(item['score'])
+                reordered.append(kf)
+
+            return reordered
         except Exception as e:
-            print(f"Warning: SuperGlobal Reranking failed ({e}), falling back to simplified reranking")
-            
-            # Fallback to simplified reranking
-            enhanced_keyframes = []
-            
-            for kf in keyframes:
-                # Simplified reranking that combines original score with position
-                enhanced_score = kf.confidence_score * 1.1  # Slight boost for reranked items
-                
-                enhanced_kf = KeyframeServiceReponse(
-                    key=int(kf.key),
-                    video_num=safe_convert_video_num(kf.video_num),
-                    group_num=int(kf.group_num),
-                    keyframe_num=int(kf.keyframe_num),
-                    confidence_score=min(1.0, enhanced_score),  # Clamp to max 1.0
-                    embedding=kf.embedding
-                )
-                enhanced_keyframes.append(enhanced_kf)
-            
-            # Sort by enhanced scores
-            enhanced_keyframes.sort(key=lambda x: x.confidence_score, reverse=True)
-            
-            return enhanced_keyframes
+            print(f"Warning: SuperGlobal Reranking failed ({e}), keeping original ordering")
+            return keyframes
     
     def _create_enhanced_moments(
         self,

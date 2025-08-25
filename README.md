@@ -19,7 +19,7 @@ A FastAPI-based AI application powered by Milvus for vector search, MongoDB for 
 ```bash
 pip install uv
 uv init --python=3.10
-uv add aiofiles beanie dotenv fastapi[standard] httpx ipykernel motor nicegui numpy open-clip-torch pydantic-settings pymilvus streamlit torch typing-extensions usearch uvicorn ffmpeg
+uv add aiofiles beanie dotenv fastapi[standard] httpx ipykernel motor nicegui numpy open-clip-torch pydantic-settings pymilvus streamlit torch typing-extensions usearch uvicorn ffmpeg scikit-learn
 ```
 
 2. Activate .venv

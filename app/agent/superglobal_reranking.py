@@ -1,3 +1,111 @@
+import numpy as np
+from typing import List, Dict
+try:
+    from sklearn.neighbors import NearestNeighbors
+    _HAVE_SKLEARN = True
+except Exception:
+    NearestNeighbors = None  # type: ignore
+    _HAVE_SKLEARN = False
+from core.logger import SimpleLogger
+
+
+logger = SimpleLogger(__name__)
+
+
+class SuperGlobalReranker:
+    def __init__(self, all_embeddings: np.ndarray, all_ids: List[str], k_neighbors: int = 10):
+        """
+        Initializes the SuperGlobalReranker.
+        :param all_embeddings: A numpy array of all embeddings in the database.
+        :param all_ids: A list of all corresponding keyframe IDs.
+        :param k_neighbors: Number of nearest neighbors to use for refinement.
+        """
+        logger.info(f"Initializing SuperGlobalReranker with {len(all_ids)} embeddings.")
+        self.all_embeddings = all_embeddings.astype(np.float32, copy=False)
+        self.all_ids = all_ids
+        self.id_to_idx = {id_str: i for i, id_str in enumerate(all_ids)}
+        self.k_neighbors = min(k_neighbors, max(1, len(all_ids)))
+
+        # Use scikit-learn if available; otherwise fall back to NumPy brute-force
+        if _HAVE_SKLEARN:
+            self.nn_model = NearestNeighbors(n_neighbors=self.k_neighbors, metric='cosine', algorithm='brute')
+            self.nn_model.fit(self.all_embeddings)
+            logger.info("NearestNeighbors model fitted successfully.")
+        else:
+            self.nn_model = None
+            logger.warning("scikit-learn not found. Using NumPy fallback for neighbor search (slower).")
+
+    def _kneighbors_indices(self, x: np.ndarray) -> np.ndarray:
+        if self.nn_model is not None:
+            _, indices = self.nn_model.kneighbors(x.reshape(1, -1))
+            return indices[0]
+        A = self.all_embeddings
+        denom = (np.linalg.norm(A, axis=1) * (np.linalg.norm(x) + 1e-12) + 1e-12)
+        sims = (A @ x) / denom
+        return np.argsort(-sims)[: self.k_neighbors]
+
+    def _refine_embedding(self, embedding: np.ndarray) -> np.ndarray:
+        """Refines a single embedding using k-NN and GeM pooling."""
+        indices = self._kneighbors_indices(embedding)
+        # Get the embeddings of the nearest neighbors
+        neighbor_embeddings = self.all_embeddings[indices]
+
+        # Apply GeM (Generalized Mean) pooling - p=3 is a common choice
+        # Adding a small epsilon to avoid issues with zero values
+        refined_emb = (np.mean((neighbor_embeddings + 1e-6) ** 3, axis=0)) ** (1/3)
+
+        return refined_emb
+
+    def rerank(self, query_embedding: np.ndarray, initial_candidates: List[Dict]) -> List[Dict]:
+        """
+        Reranks the initial candidates using the SuperGlobal method.
+        :param query_embedding: The embedding of the search query.
+        :param initial_candidates: A list of candidate dictionaries from the initial search.
+        :return: A reranked list of candidates.
+        """
+        if not initial_candidates:
+            return []
+
+        logger.info(f"Starting SuperGlobal reranking for {len(initial_candidates)} candidates.")
+
+        # Refine the query embedding
+        refined_query_emb = self._refine_embedding(query_embedding)
+
+        reranked_results = []
+        for candidate in initial_candidates:
+            candidate_id = candidate.get('id') or candidate.get('key')
+            if candidate_id is None:
+                continue
+            if candidate_id not in self.id_to_idx:
+                continue  # Skip if candidate not in the main index
+
+            candidate_idx = self.id_to_idx[candidate_id]
+            candidate_emb = self.all_embeddings[candidate_idx]
+
+            # Refine candidate embedding
+            refined_candidate_emb = self._refine_embedding(candidate_emb)
+
+            # Calculate original and refined cosine similarities turned into scores (higher is better)
+            def _cos(a: np.ndarray, b: np.ndarray) -> float:
+                denom = (np.linalg.norm(a) * np.linalg.norm(b))
+                if denom == 0:
+                    return 0.0
+                return float(np.dot(a, b) / denom)
+
+            original_sim = _cos(query_embedding, candidate_emb)
+            refined_sim = _cos(refined_query_emb, refined_candidate_emb)
+
+            # Combine scores (weights can be tuned)
+            final_score = 0.5 * original_sim + 0.5 * refined_sim
+
+            reranked_results.append({**candidate, 'score': final_score})
+
+        # Sort by the new final score in descending order
+        reranked_results.sort(key=lambda x: x['score'], reverse=True)
+
+        logger.info("SuperGlobal reranking completed.")
+        return reranked_results
+
 """
 SuperGlobal Reranking Module
 Implements GRAB framework's reranking using Generalized Mean (GeM) pooling

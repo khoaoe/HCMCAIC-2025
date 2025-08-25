@@ -26,6 +26,12 @@ class VCMRAutomaticRequest(BaseModel):
     corpus_index: str = Field(..., description="Identifier for corpus version")
     video_catalog: Optional[List[VideoMetadata]] = Field(None, description="Optional video catalog if system has local index")
     top_k: int = Field(default=100, le=100, description="Maximum number of candidates requested")
+    # Optional metadata filters for hybrid search
+    filter_author: Optional[str] = Field(None, description="Filter by author/channel name")
+    filter_keywords: Optional[List[str]] = Field(None, description="Filter by metadata keywords")
+    filter_publish_date: Optional[str] = Field(None, description="Filter by publish date (YYYY-MM-DD)")
+    use_hybrid_search: bool = Field(default=True, description="Enable hybrid metadata+vector search")
+    metadata_weight: float = Field(default=0.3, ge=0.0, le=1.0, description="Boost weight for metadata matches")
 
 
 class VCMRCandidate(BaseModel):
